@@ -19,6 +19,8 @@ services:
     command:
       - --model
       - ${MODEL_NAME:-zai-org/GLM-OCR}
+      - --gpu-memory-utilization
+      - ${VLLM_GPU_MEMORY_UTILIZATION:-0.9}
       - --allowed-local-media-path
       - /
       - --speculative-config
@@ -39,6 +41,8 @@ services:
     depends_on:
       vllm:
         condition: service_healthy
+    gpus: all
+    ipc: host
     ports:
       - "${PIPELINE_HOST_PORT:-5002}:5002"
     volumes:
@@ -48,11 +52,21 @@ services:
       HF_HOME: /root/.cache/huggingface
       TRANSFORMERS_CACHE: /root/.cache/huggingface
       HF_HUB_CACHE: /root/.cache/huggingface/hub
+      NVIDIA_VISIBLE_DEVICES: ${PIPELINE_LAYOUT_GPU_DEVICE:-0}
+      CUDA_VISIBLE_DEVICES: ${PIPELINE_LAYOUT_GPU_DEVICE:-0}
+      GLMOCR_CONFIG_PATH: ${GLMOCR_CONFIG_PATH:-/etc/glm-ocr/server.config.yaml}
       GLMOCR_LOG_LEVEL: ${GLMOCR_LOG_LEVEL:-INFO}
       GLMOCR_OCR_API_HOST: ${GLMOCR_OCR_API_HOST:-vllm}
       GLMOCR_OCR_API_PORT: ${GLMOCR_OCR_API_PORT:-8000}
       GLMOCR_OCR_MODEL: ${GLMOCR_OCR_MODEL:-glm-ocr}
-      GLMOCR_ENABLE_LAYOUT: ${GLMOCR_ENABLE_LAYOUT:-false}
+      GLMOCR_ENABLE_LAYOUT: "true"
+      PIPELINE_SERVER_MODE: ${PIPELINE_SERVER_MODE:-gunicorn}
+      PIPELINE_SERVER_PORT: ${PIPELINE_SERVER_PORT:-5002}
+      PIPELINE_GUNICORN_WORKERS: ${PIPELINE_GUNICORN_WORKERS:-1}
+      PIPELINE_GUNICORN_THREADS: ${PIPELINE_GUNICORN_THREADS:-8}
+      PIPELINE_GUNICORN_TIMEOUT: ${PIPELINE_GUNICORN_TIMEOUT:-300}
+      PIPELINE_GUNICORN_GRACEFUL_TIMEOUT: ${PIPELINE_GUNICORN_GRACEFUL_TIMEOUT:-60}
+      PIPELINE_GUNICORN_KEEPALIVE: ${PIPELINE_GUNICORN_KEEPALIVE:-10}
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5002/health')\""]
       interval: 30s

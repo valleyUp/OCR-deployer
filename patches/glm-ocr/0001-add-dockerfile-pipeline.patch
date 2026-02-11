@@ -1,6 +1,6 @@
 diff --git a/Dockerfile.pipeline b/Dockerfile.pipeline
 new file mode 100644
-index 0000000..0376cf7
+index 0000000..44bff36
 --- /dev/null
 +++ b/Dockerfile.pipeline
 @@ -0,0 +1,32 @@
@@ -26,7 +26,7 @@ index 0000000..0376cf7
 +COPY glmocr ./glmocr
 +COPY resources ./resources
 +
-+RUN pip install --no-cache-dir -e .
++RUN pip install --no-cache-dir -e . gunicorn
 +
 +RUN mkdir -p /root/.cache/huggingface
 +
@@ -35,4 +35,45 @@ index 0000000..0376cf7
 +HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
 +    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5002/health')" || exit 1
 +
-+CMD ["python", "-m", "glmocr.server", "--config", "/etc/glm-ocr/server.config.yaml"]
++CMD ["/bin/sh", "-lc", "if [ \"${PIPELINE_SERVER_MODE:-gunicorn}\" = \"flask\" ]; then exec python -m glmocr.server --config \"${GLMOCR_CONFIG_PATH:-/etc/glm-ocr/server.config.yaml}\"; else exec gunicorn --bind 0.0.0.0:${PIPELINE_SERVER_PORT:-5002} --workers ${PIPELINE_GUNICORN_WORKERS:-1} --threads ${PIPELINE_GUNICORN_THREADS:-8} --worker-class gthread --timeout ${PIPELINE_GUNICORN_TIMEOUT:-300} --graceful-timeout ${PIPELINE_GUNICORN_GRACEFUL_TIMEOUT:-60} --keep-alive ${PIPELINE_GUNICORN_KEEPALIVE:-10} --access-logfile - --error-logfile - glmocr.wsgi:app; fi"]
+diff --git a/glmocr/wsgi.py b/glmocr/wsgi.py
+new file mode 100644
+index 0000000..8d05c48
+--- /dev/null
++++ b/glmocr/wsgi.py
+@@ -0,0 +1,35 @@
++"""WSGI entrypoint for production serving with Gunicorn."""
++
++import atexit
++import multiprocessing
++import os
++
++from glmocr.config import load_config
++from glmocr.server import create_app
++from glmocr.utils.logging import configure_logging, get_logger
++
++logger = get_logger(__name__)
++
++try:
++    multiprocessing.set_start_method("spawn", force=True)
++except RuntimeError:
++    # Already configured by runtime; safe to continue.
++    pass
++
++config_path = os.getenv("GLMOCR_CONFIG_PATH", "/etc/glm-ocr/server.config.yaml")
++config = load_config(config_path)
++configure_logging(level=os.getenv("GLMOCR_LOG_LEVEL") or config.logging.level)
++
++app = create_app(config)
++pipeline = app.config["pipeline"]
++pipeline.start()
++
++
++def _shutdown_pipeline() -> None:
++    try:
++        pipeline.stop()
++    except Exception as exc:
++        logger.warning("Pipeline stop failed during shutdown: %s", exc)
++
++
++atexit.register(_shutdown_pipeline)

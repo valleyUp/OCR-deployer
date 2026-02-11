@@ -71,6 +71,17 @@
 ./scripts/diagnose-stack.sh           # 可选: 传入测试图片路径
 ```
 
+### 生产建议（pipeline 使用 WSGI）
+
+- pipeline 容器默认以 `gunicorn`（WSGI）启动，可用 `PIPELINE_SERVER_MODE=flask` 回退。
+- layout 默认启用，且默认走 GPU。
+- layout 绑定 GPU 只需改一个变量：`PIPELINE_LAYOUT_GPU_DEVICE`（在 `deploy/.env`）。
+- 默认参数可在 `deploy/.env` 调整：
+  - `PIPELINE_GUNICORN_WORKERS=1`
+  - `PIPELINE_GUNICORN_THREADS=8`
+  - `PIPELINE_GUNICORN_TIMEOUT=300`
+- OCR 推理服务（vLLM）默认 `VLLM_GPU_MEMORY_UTILIZATION=0.9`。
+
 ## 镜像构建与离线迁移
 
 ### 1) 分开构建四个镜像
@@ -100,7 +111,9 @@ docker load -i ./glm-ocr-4images.tar
 ## Patch Queue 流程
 
 当前 `patches/glm-ocr/series` 中维护对 submodule 的补丁顺序，默认包含：
-- `0001-add-dockerfile-pipeline.patch`（给上游补充 `Dockerfile.pipeline`）
+- `0001-add-dockerfile-pipeline.patch`（补充 `Dockerfile.pipeline` 与 WSGI 入口）
+- `0002-backend-use-layout-ocr-url-env.patch`（backend 通过 env 访问 pipeline）
+- `0003-backend-handle-missing-page-size.patch`（backend 布局解析容错）
 
 应用补丁：
 

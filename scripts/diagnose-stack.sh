@@ -31,6 +31,7 @@ BACKEND_CONTAINER_NAME="${BACKEND_CONTAINER_NAME:-glm-ocr-backend}"
 
 LAYOUT_OCR_URL_EXPECTED="${LAYOUT_OCR_URL:-http://pipeline:5002/glmocr/parse}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-glm-ocr}"
+PIPELINE_LAYOUT_GPU_DEVICE_EXPECTED="${PIPELINE_LAYOUT_GPU_DEVICE:-0}"
 
 run_compose() {
     docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -100,6 +101,26 @@ if docker exec "${PIPELINE_CONTAINER_NAME}" python -c "import urllib.request; ur
 else
     fail "pipeline -> vllm:8000 unreachable"
 fi
+
+layout_enabled_in_pipeline="$(docker exec "${PIPELINE_CONTAINER_NAME}" /bin/sh -lc 'echo ${GLMOCR_ENABLE_LAYOUT:-}' 2>/dev/null || true)"
+if [[ "${layout_enabled_in_pipeline}" == "true" ]]; then
+    pass "pipeline GLMOCR_ENABLE_LAYOUT=${layout_enabled_in_pipeline}"
+else
+    fail "pipeline GLMOCR_ENABLE_LAYOUT=${layout_enabled_in_pipeline} (expected true)"
+fi
+
+cuda_visible_devices_in_pipeline="$(docker exec "${PIPELINE_CONTAINER_NAME}" /bin/sh -lc 'echo ${CUDA_VISIBLE_DEVICES:-}' 2>/dev/null || true)"
+if [[ "${cuda_visible_devices_in_pipeline}" == "${PIPELINE_LAYOUT_GPU_DEVICE_EXPECTED}" ]]; then
+    pass "pipeline CUDA_VISIBLE_DEVICES=${cuda_visible_devices_in_pipeline}"
+else
+    fail "pipeline CUDA_VISIBLE_DEVICES=${cuda_visible_devices_in_pipeline} (expected ${PIPELINE_LAYOUT_GPU_DEVICE_EXPECTED})"
+fi
+
+if docker exec "${PIPELINE_CONTAINER_NAME}" python -c "import torch; raise SystemExit(0 if torch.cuda.is_available() else 1)" >/dev/null 2>&1; then
+    pass "pipeline torch.cuda.is_available()=True"
+else
+    fail "pipeline torch.cuda.is_available()=False"
+fi
 echo
 
 if [[ -f "${TEST_IMAGE}" ]]; then
@@ -129,4 +150,3 @@ echo "PASS=${pass_count} FAIL=${fail_count}"
 if [[ "${fail_count}" -gt 0 ]]; then
     exit 1
 fi
-

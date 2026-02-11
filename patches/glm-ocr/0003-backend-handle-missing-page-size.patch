@@ -1,0 +1,66 @@
+diff --git a/apps/backend/app/core/steps/layout_ocr.py b/apps/backend/app/core/steps/layout_ocr.py
+index fecca3f..cbcf72e 100644
+--- a/apps/backend/app/core/steps/layout_ocr.py
++++ b/apps/backend/app/core/steps/layout_ocr.py
+@@ -13,6 +13,7 @@ from app.core.flows.base import ProcessingContext
+ from app.utils.config import settings
+ from app.utils.image_processer import crop_image_by_bbox_to_path, vlm_bbox_convert
+ from app.utils.logger import logger
++from PIL import Image
+ 
+ 
+ class LayoutOcrStepInput:
+@@ -113,12 +114,22 @@ async def _call_ocr_service(
+     custom_url = config.get("custom_url", None)
+     cli = LayoutAndOCRClient()
+     pages_result = []
+-    page_width = page_size.get("width")
+-    page_height = page_size.get("height")
++    page_width = page_size.get("width") if isinstance(page_size, dict) else None
++    page_height = page_size.get("height") if isinstance(page_size, dict) else None
+     block_idx = 1
+     ref_image_paths = []
+     for i, image_file in enumerate(image_files):
+         page_num = i + 1
++        current_page_width = page_width
++        current_page_height = page_height
++        if not current_page_width or not current_page_height:
++            try:
++                with Image.open(image_file) as image:
++                    current_page_width, current_page_height = image.size
++            except Exception as e:
++                logger.warning(f"Failed to read image size from {image_file}: {e}")
++                current_page_width, current_page_height = 1000, 1000
++
+         result = await cli.process_single_image(image_file, custom_url=custom_url)
+         if progress_callback:
+             progress = (i / page_count) * 100
+@@ -127,11 +138,21 @@ async def _call_ocr_service(
+             )
+         page_blocks = []
+         for idx, block in enumerate(result):
++            if not isinstance(block, dict):
++                logger.warning(f"Unexpected block type on page {page_num}: {type(block)}")
++                continue
++
+             block_label = block.get("label", "text")
+-            block_bbox = block.get("bbox_2d", [0, 0, 0, 0])
++            raw_bbox = block.get("bbox_2d")
++            if isinstance(raw_bbox, (list, tuple)) and len(raw_bbox) == 4:
++                block_bbox = list(raw_bbox)
++            else:
++                block_bbox = [0, 0, 0, 0]
+             block_content = block.get("content", None)
+             block_index = block_idx
+-            normalized_box = vlm_bbox_convert(block_bbox, page_width, page_height)
++            normalized_box = vlm_bbox_convert(
++                block_bbox, current_page_width, current_page_height
++            )
+ 
+             # 如果 label 为 image，则裁剪图片并添加到 image_path 字段
+             image_path_field = None
+@@ -189,4 +210,3 @@ async def _call_ocr_service(
+         logger.error(f"Failed to save OCR results: {e}")
+ 
+     return ocr_result_data
+-

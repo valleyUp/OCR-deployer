@@ -1,0 +1,31 @@
+diff --git a/apps/backend/app/core/ocr_client.py b/apps/backend/app/core/ocr_client.py
+index 275f1e9..d0bc779 100644
+--- a/apps/backend/app/core/ocr_client.py
++++ b/apps/backend/app/core/ocr_client.py
+@@ -78,10 +78,9 @@ class LayoutAndOCRClient:
+             service_url: 服务URL。如果为None，则从配置加载。
+             timeout: 请求超时时间（秒）
+         """
+-        self.service_url = service_url or getattr(settings, "layout_ocr_url", None)
++        self.service_url = service_url or settings.LAYOUT_OCR_URL
+         if not self.service_url:
+-            # 默认配置
+-            self.service_url = "http://localhost:5002/glmocr/parse"
++            self.service_url = "http://pipeline:5002/glmocr/parse"
+ 
+         self.timeout = timeout
+         self.async_headers = {"Content-Type": "application/json"}
+diff --git a/apps/backend/app/utils/config.py b/apps/backend/app/utils/config.py
+index 196fff3..84c098a 100644
+--- a/apps/backend/app/utils/config.py
++++ b/apps/backend/app/utils/config.py
+@@ -19,6 +19,9 @@ class Settings(BaseSettings):
+     # 数据库配置
+     DATABASE_URL: str = "sqlite+aiosqlite:///./tasks.db"
+ 
++    # OCR pipeline service URL (for container-to-container calls)
++    LAYOUT_OCR_URL: str = "http://pipeline:5002/glmocr/parse"
++
+     # 输出目录
+     OUTPUT_DIR: str = "./data"
+ 

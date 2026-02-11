@@ -27,6 +27,7 @@
 │   ├── compose-stack.sh               # compose 统一入口
 │   ├── build-images.sh                # 分开构建四个镜像
 │   ├── save-images.sh                 # 导出四镜像 tar 包
+│   ├── diagnose-stack.sh              # 四容器链路诊断
 │   ├── patch-queue-apply.sh           # 应用 patch queue
 │   ├── patch-queue-refresh.sh         # 刷新 patch
 │   └── status.sh                      # 查看根仓+submodule状态
@@ -67,6 +68,7 @@
 ./scripts/compose-stack.sh status
 ./scripts/compose-stack.sh logs pipeline
 ./scripts/compose-stack.sh down
+./scripts/diagnose-stack.sh           # 可选: 传入测试图片路径
 ```
 
 ## 镜像构建与离线迁移

@@ -15,6 +15,7 @@ pipeline:
     # Docker Compose network 内使用服务名访问 vLLM
     api_host: vllm
     api_port: 8000
+    model: glm-ocr
     api_key: null # or set API_KEY env var
     connect_timeout: 300
     request_timeout: 300

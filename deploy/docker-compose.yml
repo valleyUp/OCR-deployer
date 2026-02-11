@@ -26,11 +26,11 @@ services:
       - --served-model-name
       - ${SERVED_MODEL_NAME:-glm-ocr}
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
       interval: 30s
       timeout: 10s
-      start_period: 60s
-      retries: 5
+      start_period: 360s
+      retries: 10
 
   pipeline:
     image: ${PIPELINE_IMAGE:-glm-ocr-pipeline:local}
@@ -51,13 +51,14 @@ services:
       GLMOCR_LOG_LEVEL: ${GLMOCR_LOG_LEVEL:-INFO}
       GLMOCR_OCR_API_HOST: ${GLMOCR_OCR_API_HOST:-vllm}
       GLMOCR_OCR_API_PORT: ${GLMOCR_OCR_API_PORT:-8000}
+      GLMOCR_OCR_MODEL: ${GLMOCR_OCR_MODEL:-glm-ocr}
       GLMOCR_ENABLE_LAYOUT: ${GLMOCR_ENABLE_LAYOUT:-false}
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5002/health')\""]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5002/health')\""]
       interval: 30s
       timeout: 10s
-      start_period: 90s
-      retries: 5
+      start_period: 180s
+      retries: 10
 
   backend:
     image: ${BACKEND_IMAGE:-glm-ocr-backend:local}
@@ -76,11 +77,11 @@ services:
       LOG_LEVEL: ${BACKEND_LOG_LEVEL:-INFO}
       DEBUG: ${BACKEND_DEBUG:-false}
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
       interval: 30s
       timeout: 10s
       start_period: 60s
-      retries: 5
+      retries: 10
 
   frontend:
     image: ${FRONTEND_IMAGE:-glm-ocr-frontend:local}

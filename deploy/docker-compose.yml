@@ -16,6 +16,8 @@ services:
       HF_HOME: /root/.cache/huggingface
       TRANSFORMERS_CACHE: /root/.cache/huggingface
       HF_HUB_CACHE: /root/.cache/huggingface/hub
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+      TRANSFORMERS_OFFLINE: ${TRANSFORMERS_OFFLINE:-0}
     command:
       - --model
       - ${MODEL_NAME:-zai-org/GLM-OCR}
@@ -52,6 +54,8 @@ services:
       HF_HOME: /root/.cache/huggingface
       TRANSFORMERS_CACHE: /root/.cache/huggingface
       HF_HUB_CACHE: /root/.cache/huggingface/hub
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+      TRANSFORMERS_OFFLINE: ${TRANSFORMERS_OFFLINE:-0}
       NVIDIA_VISIBLE_DEVICES: ${PIPELINE_LAYOUT_GPU_DEVICE:-0}
       CUDA_VISIBLE_DEVICES: ${PIPELINE_LAYOUT_GPU_DEVICE:-0}
       GLMOCR_CONFIG_PATH: ${GLMOCR_CONFIG_PATH:-/etc/glm-ocr/server.config.yaml}

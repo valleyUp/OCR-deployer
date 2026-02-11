@@ -16,8 +16,14 @@ if [[ ! -f "${ENV_FILE}" && -f "${ENV_EXAMPLE}" ]]; then
     echo "Created ${ENV_FILE} from .env.example"
 fi
 
+if docker compose version &>/dev/null; then
+    COMPOSE_CMD="docker compose"
+else
+    COMPOSE_CMD="docker-compose"
+fi
+
 run_compose() {
-    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+    ${COMPOSE_CMD} --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
 ensure_upstream() {

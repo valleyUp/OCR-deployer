@@ -1,0 +1,23 @@
+# Model caches / weights
+huggingface/
+runtime/
+models/
+checkpoints/
+weights/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Tooling leftovers
+*.log
+*.rej
+
+# Compose local environment
+deploy/.env

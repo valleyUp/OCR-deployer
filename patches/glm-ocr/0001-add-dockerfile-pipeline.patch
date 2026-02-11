@@ -1,0 +1,38 @@
+diff --git a/Dockerfile.pipeline b/Dockerfile.pipeline
+new file mode 100644
+index 0000000..0376cf7
+--- /dev/null
++++ b/Dockerfile.pipeline
+@@ -0,0 +1,32 @@
++FROM python:3.12-slim
++
++WORKDIR /app
++
++ENV PYTHONUNBUFFERED=1 \
++    PYTHONDONTWRITEBYTECODE=1 \
++    PIP_NO_CACHE_DIR=1 \
++    PIP_DISABLE_PIP_VERSION_CHECK=1 \
++    HF_HOME=/root/.cache/huggingface \
++    TRANSFORMERS_CACHE=/root/.cache/huggingface \
++    HF_HUB_CACHE=/root/.cache/huggingface/hub
++
++RUN apt-get update && apt-get install -y --no-install-recommends \
++    libgl1 \
++    libglib2.0-0 \
++    libgomp1 \
++    && rm -rf /var/lib/apt/lists/*
++
++COPY pyproject.toml setup.py README.md ./
++COPY glmocr ./glmocr
++COPY resources ./resources
++
++RUN pip install --no-cache-dir -e .
++
++RUN mkdir -p /root/.cache/huggingface
++
++EXPOSE 5002
++
++HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
++    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5002/health')" || exit 1
++
++CMD ["python", "-m", "glmocr.server", "--config", "/etc/glm-ocr/server.config.yaml"]

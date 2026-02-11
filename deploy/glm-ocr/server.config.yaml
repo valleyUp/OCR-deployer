@@ -1,0 +1,35 @@
+# Server (for glmocr.server)
+server:
+  host: "0.0.0.0"
+  port: 5002
+  debug: false
+
+# Logging
+logging:
+  level: INFO # DEBUG enables profiling
+
+# Pipeline
+pipeline:
+  # OCR API connection
+  ocr_api:
+    # Docker Compose network 内使用服务名访问 vLLM
+    api_host: vllm
+    api_port: 8000
+    api_key: null # or set API_KEY env var
+    connect_timeout: 300
+    request_timeout: 300
+
+  # Page loader settings
+  page_loader:
+    max_tokens: 16384
+    temperature: 0.01
+    image_format: JPEG
+    min_pixels: 12544
+    max_pixels: 71372800
+
+  # Result formatting
+  result_formatter:
+    output_format: both # json, markdown, or both
+
+  # Layout detection (optional)
+  enable_layout: false

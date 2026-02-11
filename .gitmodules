@@ -1,0 +1,4 @@
+[submodule "upstream/glm-ocr"]
+	path = upstream/glm-ocr
+	url = https://github.com/zai-org/GLM-OCR.git
+	branch = main

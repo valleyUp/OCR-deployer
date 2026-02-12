@@ -1,0 +1,236 @@
+diff --git a/apps/frontend/Dockerfile b/apps/frontend/Dockerfile
+index c12c20f..689ceb7 100644
+--- a/apps/frontend/Dockerfile
++++ b/apps/frontend/Dockerfile
+@@ -16,7 +16,16 @@ RUN pnpm install
+ COPY . .
+ 
+ # 构建项目并清理缓存
+-RUN pnpm build && \
++RUN pdfjs_dist_dir="$(find node_modules -type d -path '*/pdfjs-dist' | head -n 1)" && \
++    if [ -z "${pdfjs_dist_dir}" ]; then echo "pdfjs-dist not found in node_modules" >&2; exit 1; fi && \
++    pdfjs_worker="${pdfjs_dist_dir}/build/pdf.worker.min.mjs" && \
++    if [ ! -f "${pdfjs_worker}" ]; then pdfjs_worker="${pdfjs_dist_dir}/legacy/build/pdf.worker.min.mjs"; fi && \
++    if [ ! -f "${pdfjs_worker}" ]; then echo "pdf.worker.min.mjs not found" >&2; exit 1; fi && \
++    mkdir -p public/pdfjs && \
++    cp "${pdfjs_worker}" public/pdfjs/pdf.worker.min.mjs && \
++    cp -R "${pdfjs_dist_dir}/cmaps" public/pdfjs/ && \
++    cp -R "${pdfjs_dist_dir}/standard_fonts" public/pdfjs/ && \
++    pnpm build && \
+     pnpm store prune && \
+     rm -rf node_modules
+ 
+diff --git a/apps/frontend/README.md b/apps/frontend/README.md
+index 27f73f7..3ce9513 100644
+--- a/apps/frontend/README.md
++++ b/apps/frontend/README.md
+@@ -112,12 +112,12 @@ src/
+ 创建 `.env` 文件并配置：
+ 
+ ```env
+-VITE_API_URL=http://localhost:8000/api/v1
++VITE_API_URL=/api/v1
+ ```
+ 
+ ### API 配置
+ 
+-默认 API 地址为 `http://localhost:8000/api/v1`，可通过环境变量 `VITE_API_URL` 修改。
++默认 API 地址为 `/api/v1`（同源访问，适合内网部署），可通过环境变量 `VITE_API_URL` 修改为完整后端地址。
+ 
+ ## 📖 使用说明
+ 
+diff --git a/apps/frontend/nginx.conf b/apps/frontend/nginx.conf
+index 99e62ef..3609804 100644
+--- a/apps/frontend/nginx.conf
++++ b/apps/frontend/nginx.conf
+@@ -1,9 +1,39 @@
+ server {
+         listen 80;
++        client_max_body_size 100m;
++
++        location /pdfjs/ {
++                root /usr/share/nginx/html;
++                types {
++                        application/javascript mjs;
++                        application/octet-stream bcmap pfb;
++                        font/ttf ttf;
++                }
++                default_type application/octet-stream;
++                try_files $uri =404;
++                expires 1y;
++                add_header Cache-Control "public, max-age=31536000, immutable";
++        }
++
++        location /api/ {
++                proxy_pass http://backend:8000/api/;
++                proxy_http_version 1.1;
++                proxy_set_header Host $host;
++                proxy_set_header X-Real-IP $remote_addr;
++                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
++                proxy_set_header X-Forwarded-Proto $scheme;
++                proxy_read_timeout 600s;
++                proxy_send_timeout 600s;
++        }
++
++        location = / {
++                root /usr/share/nginx/html;
++                try_files /index.html =404;
++        }
++
+         location / {
+                 root /usr/share/nginx/html;
+                 index index.html;
+-                try_files $uri $uri/ /index.html;
++                try_files $uri /index.html;
+         }
+-
+ }
+diff --git a/apps/frontend/src/components/ocr/PdfViewer.tsx b/apps/frontend/src/components/ocr/PdfViewer.tsx
+index 96d71b1..7abc31b 100644
+--- a/apps/frontend/src/components/ocr/PdfViewer.tsx
++++ b/apps/frontend/src/components/ocr/PdfViewer.tsx
+@@ -8,7 +8,8 @@ import { usePdfZoom } from '@/hooks/usePdfZoom';
+ import 'react-pdf/dist/Page/AnnotationLayer.css';
+ // import 'react-pdf/dist/Page/TextLayer.css';
+ 
+-pdfjs.GlobalWorkerOptions.workerSrc = `https://registry.npmmirror.com/pdfjs-dist/${pdfjs.version}/files/build/pdf.worker.min.mjs`
++const PDFJS_STATIC_BASE = '/pdfjs';
++pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS_STATIC_BASE}/pdf.worker.min.mjs`;
+ 
+ 
+ 
+@@ -47,8 +48,9 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
+ 
+     const documentOptions = useMemo(
+         () => ({
+-            cMapUrl: `https://registry.npmmirror.com/pdfjs-dist/${pdfjs.version}/files/cmaps/`,
++            cMapUrl: `${PDFJS_STATIC_BASE}/cmaps/`,
+             cMapPacked: true,
++            standardFontDataUrl: `${PDFJS_STATIC_BASE}/standard_fonts/`,
+         }),
+         []
+     );
+diff --git a/apps/frontend/src/libs/api.ts b/apps/frontend/src/libs/api.ts
+index 13ab706..8871d30 100644
+--- a/apps/frontend/src/libs/api.ts
++++ b/apps/frontend/src/libs/api.ts
+@@ -1,6 +1,6 @@
+ import axios from 'axios'
+ 
+-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
++const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
+ 
+ // 创建 axios 实例
+ const api = axios.create({
+diff --git a/apps/frontend/src/routes/_ocr/FilePreview.tsx b/apps/frontend/src/routes/_ocr/FilePreview.tsx
+index e7d0aa0..21d0a8c 100644
+--- a/apps/frontend/src/routes/_ocr/FilePreview.tsx
++++ b/apps/frontend/src/routes/_ocr/FilePreview.tsx
+@@ -23,6 +23,15 @@ export function FilePreview({ file, result }: FilePreviewProps) {
+ 	const blocks = useOcrStore(s => s.blocks)
+ 
+ 	const [showCopyButton, setShowCopyButton] = useState(false)
++	const lowerFileName = file?.name.toLowerCase() ?? ''
++	const isPdfFile = Boolean(
++		file && (file.type === 'application/pdf' || lowerFileName.endsWith('.pdf'))
++	)
++	const isImageFile = Boolean(
++		file &&
++		(file.type.startsWith('image/') ||
++			/\.(png|jpe?g|webp|bmp|gif)$/i.test(lowerFileName))
++	)
+ 
+ 	// 获取 PDF 原始尺寸（从 metadata 或默认值）
+ 	const pdfOriginalWidth = result?.response?.metadata?.width ?? 1654
+@@ -42,7 +51,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
+ 	// 计算图片的缩放比例和偏移量
+ 	const [imageScale, setImageScale] = useState({ x: 1, y: 1, offsetX: 0, offsetY: 0 })
+ 	useEffect(() => {
+-		if (!imageRef.current || file?.type === 'application/pdf') return
++		if (!imageRef.current || isPdfFile) return
+ 
+ 		const updateImageScale = () => {
+ 			const img = imageRef.current
+@@ -78,12 +87,12 @@ export function FilePreview({ file, result }: FilePreviewProps) {
+ 			img.removeEventListener('load', updateImageScale)
+ 			window.removeEventListener('resize', updateImageScale)
+ 		}
+-	}, [pdfUrl, file?.type])
++	}, [pdfUrl, isPdfFile])
+ 
+ 	const pdfPageMetrics = usePdfPageMetrics(
+ 		viewerRef as RefObject<HTMLDivElement>,
+ 		pdfUrl,
+-		file?.type,
++		isPdfFile ? 'application/pdf' : file?.type,
+ 		isValid,
+ 		activeBlock,
+ 		pdfOriginalWidth,
+@@ -124,7 +133,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
+ 
+ 	// 当文件变化时，创建 URL
+ 	useEffect(() => {
+-		if (file && (file.type === 'application/pdf' || file.type.startsWith('image/'))) {
++		if (file && (isPdfFile || isImageFile)) {
+ 			const url = URL.createObjectURL(file.file)
+ 			setPdfUrl(url)
+ 
+@@ -134,7 +143,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
+ 		} else {
+ 			setPdfUrl(null)
+ 		}
+-	}, [file])
++	}, [file, isPdfFile, isImageFile])
+ 
+ 
+ 
+@@ -175,7 +184,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
+ 	return (
+ 		<div className='pdf-preview h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden relative'>
+ 			<div className='flex-1 h-full overflow-hidden' ref={viewerRef}>
+-				{file.type === 'application/pdf' ? (
++				{isPdfFile ? (
+ 					<PdfViewer
+ 						file={file.file}
+ 						className='h-full'
+@@ -184,7 +193,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
+ 						onPageMouseMove={(e, pageNumber) => handlePdfMouseMove(e, pageNumber, pdfOriginalWidth, pdfOriginalHeight)}
+ 						onPageMouseLeave={handlePdfMouseLeave}
+ 					/>
+-				) : file.type.startsWith('image/') && pdfUrl ? (
++				) : isImageFile && pdfUrl ? (
+ 					<div
+ 						className='h-full flex items-center justify-center p-4 overflow-auto relative cursor-pointer'
+ 						onClick={handleImageClick}
+diff --git a/apps/frontend/src/routes/_ocr/FileUpload.tsx b/apps/frontend/src/routes/_ocr/FileUpload.tsx
+index 9a9ef35..cd7b672 100644
+--- a/apps/frontend/src/routes/_ocr/FileUpload.tsx
++++ b/apps/frontend/src/routes/_ocr/FileUpload.tsx
+@@ -49,6 +49,18 @@ const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.pdf']
+ // 文件大小限制：20MB
+ const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB in bytes
+ 
++const inferMimeTypeByName = (name: string): string => {
++	const lowerName = name.toLowerCase()
++	if (lowerName.endsWith('.pdf')) return 'application/pdf'
++	if (lowerName.endsWith('.png')) return 'image/png'
++	if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'image/jpeg'
++	return ''
++}
++
++const normalizeFileType = (file: File): string => {
++	if (file.type) return file.type
++	return inferMimeTypeByName(file.name)
++}
+ 
+ // 验证文件类型
+ const isValidFileType = (file: File): boolean => {
+@@ -147,7 +159,7 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
+ 			id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+ 			name: file.name,
+ 			size: file.size,
+-			type: file.type,
++			type: normalizeFileType(file),
+ 			file: file,
+ 			uploadTime: new Date(),
+ 			error: null

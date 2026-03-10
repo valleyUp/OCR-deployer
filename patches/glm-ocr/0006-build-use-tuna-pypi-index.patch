@@ -1,0 +1,54 @@
+diff --git a/Dockerfile.pipeline b/Dockerfile.pipeline
+index 44bff36..f13e866 100644
+--- a/Dockerfile.pipeline
++++ b/Dockerfile.pipeline
+@@ -1,5 +1,7 @@
+ FROM python:3.12-slim
+ 
++ARG PYPI_INDEX_URL=https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
++
+ WORKDIR /app
+ 
+ ENV PYTHONUNBUFFERED=1 \
+@@ -20,7 +22,8 @@ COPY pyproject.toml setup.py README.md ./
+ COPY glmocr ./glmocr
+ COPY resources ./resources
+ 
+-RUN pip install --no-cache-dir -e . gunicorn
++RUN pip config set global.index-url "${PYPI_INDEX_URL}" && \
++    pip install --no-cache-dir -e . gunicorn
+ 
+ RUN mkdir -p /root/.cache/huggingface
+ 
+diff --git a/apps/backend/Dockerfile b/apps/backend/Dockerfile
+index 2bb64c6..8156c18 100644
+--- a/apps/backend/Dockerfile
++++ b/apps/backend/Dockerfile
+@@ -1,6 +1,8 @@
+ # 使用官方Python 3.12镜像作为基础镜像
+ FROM python:3.12-slim
+ 
++ARG PYPI_INDEX_URL=https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
++
+ # 设置工作目录
+ WORKDIR /app
+ 
+@@ -51,8 +53,9 @@ COPY app ./app
+ RUN touch README.md
+ 
+ # 安装uv包管理器并安装项目依赖
+-RUN pip install --no-cache-dir uv -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+-    uv pip install --system -e . 
++RUN pip config set global.index-url "${PYPI_INDEX_URL}" && \
++    pip install --no-cache-dir uv && \
++    PIP_INDEX_URL="${PYPI_INDEX_URL}" uv pip install --system -e .
+ 
+ 
+ # 暴露端口 (默认8000，可通过环境变量配置)
+@@ -63,4 +66,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+     CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+ 
+ # 运行应用（激活虚拟环境）
+-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+\ No newline at end of file
++CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

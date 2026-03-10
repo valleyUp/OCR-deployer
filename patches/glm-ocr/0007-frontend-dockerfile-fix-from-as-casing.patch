@@ -1,0 +1,20 @@
+diff --git a/apps/frontend/Dockerfile b/apps/frontend/Dockerfile
+index 689ceb7..068cc99 100644
+--- a/apps/frontend/Dockerfile
++++ b/apps/frontend/Dockerfile
+@@ -1,5 +1,5 @@
+ # 使用 Node.js 官方镜像作为基础镜像
+-FROM node:lts-alpine as build-stage
++FROM node:lts-alpine AS build-stage
+ 
+ # 设置工作目录
+ WORKDIR /app
+@@ -30,7 +30,7 @@ RUN pdfjs_dist_dir="$(find node_modules -type d -path '*/pdfjs-dist' | head -n 1
+     rm -rf node_modules
+ 
+ # 使用 Nginx 镜像作为基础镜像
+-FROM nginx:stable-alpine as production-stage
++FROM nginx:stable-alpine AS production-stage
+ 
+ # 将构建产物复制到 Nginx 服务器的服务目录
+ COPY --from=build-stage /app/dist /usr/share/nginx/html

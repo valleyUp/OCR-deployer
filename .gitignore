@@ -21,3 +21,6 @@ __pycache__/
 
 # Compose local environment
 deploy/.env
+
+.serena/
+.pnpm-store/

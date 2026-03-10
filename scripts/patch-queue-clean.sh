@@ -7,6 +7,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SUBMODULE_DIR="${REPO_ROOT}/upstream/glm-ocr"
 PATCH_DIR="${REPO_ROOT}/patches/glm-ocr"
 SERIES_FILE="${PATCH_DIR}/series"
+GENERATED_CLEAN_PATHS=(
+    "apps/frontend/public/pdfjs"
+)
 
 if [[ ! -e "${SUBMODULE_DIR}/.git" ]]; then
     echo "Missing submodule worktree: ${SUBMODULE_DIR}" >&2
@@ -39,32 +42,51 @@ compute_queue_state() {
 
 DESIRED_STATE="$(compute_queue_state)"
 
-if [[ -f "${STATE_FILE}" ]] && [[ "$(cat "${STATE_FILE}")" == "${DESIRED_STATE}" ]]; then
-    echo "Patch queue already applied for ${SUBMODULE_DIR}"
+if [[ ! -f "${STATE_FILE}" ]]; then
+    echo "Patch queue state file not found for ${SUBMODULE_DIR}, skipped cleanup."
     exit 0
 fi
 
-while IFS= read -r patch_name || [[ -n "${patch_name}" ]]; do
-    [[ -z "${patch_name}" ]] && continue
-    [[ "${patch_name}" =~ ^# ]] && continue
+if [[ "$(cat "${STATE_FILE}")" != "${DESIRED_STATE}" ]]; then
+    echo "Patch queue state mismatch for ${SUBMODULE_DIR}, skipped cleanup." >&2
+    exit 1
+fi
 
+mapfile -t patch_names < <(
+    while IFS= read -r patch_name || [[ -n "${patch_name}" ]]; do
+        [[ -z "${patch_name}" ]] && continue
+        [[ "${patch_name}" =~ ^# ]] && continue
+        printf '%s\n' "${patch_name}"
+    done < "${SERIES_FILE}"
+)
+
+for (( idx=${#patch_names[@]}-1; idx>=0; idx-- )); do
+    patch_name="${patch_names[idx]}"
     patch_path="${PATCH_DIR}/${patch_name}"
+
     if [[ ! -f "${patch_path}" ]]; then
         echo "Missing patch file: ${patch_path}" >&2
         exit 1
     fi
 
     if git -C "${SUBMODULE_DIR}" apply --check --reverse "${patch_path}" >/dev/null 2>&1; then
-        echo "Already applied: ${patch_name}"
+        git -C "${SUBMODULE_DIR}" apply --reverse "${patch_path}"
+        echo "Cleaned: ${patch_name}"
         continue
     fi
 
     if git -C "${SUBMODULE_DIR}" apply --check "${patch_path}" >/dev/null 2>&1; then
-        git -C "${SUBMODULE_DIR}" apply "${patch_path}"
-    else
-        git -C "${SUBMODULE_DIR}" apply --3way "${patch_path}"
+        echo "Already clean: ${patch_name}"
+        continue
     fi
-    echo "Applied: ${patch_name}"
-done < "${SERIES_FILE}"
 
-printf '%s\n' "${DESIRED_STATE}" > "${STATE_FILE}"
+    echo "Failed to clean patch: ${patch_name}" >&2
+    exit 1
+done
+
+for clean_path in "${GENERATED_CLEAN_PATHS[@]}"; do
+    git -C "${SUBMODULE_DIR}" clean -fd -- "${clean_path}"
+done
+
+rm -f "${STATE_FILE}"
+echo "Patch queue cleaned for ${SUBMODULE_DIR}"

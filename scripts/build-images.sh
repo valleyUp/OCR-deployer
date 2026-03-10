@@ -22,6 +22,7 @@ VLLM_IMAGE="${VLLM_IMAGE:-glm-ocr-vllm:nightly}"
 PIPELINE_IMAGE="${PIPELINE_IMAGE:-glm-ocr-pipeline:local}"
 BACKEND_IMAGE="${BACKEND_IMAGE:-glm-ocr-backend:local}"
 FRONTEND_IMAGE="${FRONTEND_IMAGE:-glm-ocr-frontend:local}"
+PYPI_INDEX_URL="${PYPI_INDEX_URL:-https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple}"
 
 UPSTREAM_DIR="${REPO_ROOT}/upstream/glm-ocr"
 
@@ -37,10 +38,24 @@ fi
 
 "${SCRIPT_DIR}/patch-queue-apply.sh"
 
-docker build -t "${VLLM_IMAGE}" -f "${REPO_ROOT}/deploy/vllm/Dockerfile" "${REPO_ROOT}/deploy/vllm"
-docker build -t "${PIPELINE_IMAGE}" -f "${REPO_ROOT}/upstream/glm-ocr/Dockerfile.pipeline" "${REPO_ROOT}/upstream/glm-ocr"
-docker build -t "${BACKEND_IMAGE}" -f "${REPO_ROOT}/upstream/glm-ocr/apps/backend/Dockerfile" "${REPO_ROOT}/upstream/glm-ocr/apps/backend"
+docker build \
+    --build-arg PYPI_INDEX_URL="${PYPI_INDEX_URL}" \
+    -t "${VLLM_IMAGE}" \
+    -f "${REPO_ROOT}/deploy/vllm/Dockerfile" \
+    "${REPO_ROOT}/deploy/vllm"
+docker build \
+    --build-arg PYPI_INDEX_URL="${PYPI_INDEX_URL}" \
+    -t "${PIPELINE_IMAGE}" \
+    -f "${REPO_ROOT}/upstream/glm-ocr/Dockerfile.pipeline" \
+    "${REPO_ROOT}/upstream/glm-ocr"
+docker build \
+    --build-arg PYPI_INDEX_URL="${PYPI_INDEX_URL}" \
+    -t "${BACKEND_IMAGE}" \
+    -f "${REPO_ROOT}/upstream/glm-ocr/apps/backend/Dockerfile" \
+    "${REPO_ROOT}/upstream/glm-ocr/apps/backend"
 docker build -t "${FRONTEND_IMAGE}" -f "${REPO_ROOT}/upstream/glm-ocr/apps/frontend/Dockerfile" "${REPO_ROOT}/upstream/glm-ocr/apps/frontend"
+
+bash "${SCRIPT_DIR}/patch-queue-clean.sh"
 
 echo "Built images:"
 echo "  ${VLLM_IMAGE}"

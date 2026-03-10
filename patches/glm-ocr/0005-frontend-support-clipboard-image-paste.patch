@@ -1,0 +1,221 @@
+diff --git a/apps/frontend/src/routes/_ocr/-FileUpload.test.tsx b/apps/frontend/src/routes/_ocr/-FileUpload.test.tsx
+new file mode 100644
+index 0000000..2099b65
+--- /dev/null
++++ b/apps/frontend/src/routes/_ocr/-FileUpload.test.tsx
+@@ -0,0 +1,109 @@
++// @vitest-environment jsdom
++
++import { cleanup, render, screen, waitFor } from '@testing-library/react'
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++import { uploadTask, getTaskStatus } from '@/libs/api'
++import { FileUpload } from './FileUpload'
++
++vi.mock('@/libs/api', () => ({
++	uploadTask: vi.fn(),
++	getTaskStatus: vi.fn()
++}))
++
++vi.mock('sonner', () => ({
++	toast: {
++		error: vi.fn()
++	}
++}))
++
++const mockedUploadTask = vi.mocked(uploadTask)
++const mockedGetTaskStatus = vi.mocked(getTaskStatus)
++const completedTaskStatus: Awaited<ReturnType<typeof getTaskStatus>> = {
++	task_id: 'task-1',
++	document_id: 'doc-1',
++	status: 'completed',
++	created_at: '2026-03-10T00:00:00Z',
++	priority: 0,
++	error_message: null
++}
++
++const createPasteEvent = (file?: File): ClipboardEvent => {
++	const event = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent
++	const items = file
++		? [
++				{
++					kind: 'file',
++					type: file.type,
++					getAsFile: () => file
++				}
++			]
++		: []
++
++	Object.defineProperty(event, 'clipboardData', {
++		value: { items }
++	})
++
++	return event
++}
++
++describe('FileUpload', () => {
++	beforeEach(() => {
++		mockedUploadTask.mockResolvedValue({ task_id: 'task-1' } as Awaited<ReturnType<typeof uploadTask>>)
++		mockedGetTaskStatus.mockResolvedValue(completedTaskStatus)
++
++		vi.spyOn(globalThis, 'setInterval').mockReturnValue(1 as unknown as ReturnType<typeof setInterval>)
++		vi.spyOn(globalThis, 'clearInterval').mockImplementation(() => {})
++	})
++
++	afterEach(() => {
++		cleanup()
++		vi.restoreAllMocks()
++	})
++
++	it('uploads pasted clipboard images from the page', async () => {
++		const onFileUploaded = vi.fn()
++
++		render(<FileUpload onFileUploaded={onFileUploaded} />)
++
++		const pastedFile = new File(['image-data'], '', { type: 'image/png' })
++		const pasteEvent = createPasteEvent(pastedFile)
++
++		window.dispatchEvent(pasteEvent)
++
++		expect(pasteEvent.defaultPrevented).toBe(true)
++
++		await waitFor(() => {
++			expect(mockedUploadTask).toHaveBeenCalledTimes(1)
++		})
++
++		const uploadArg = mockedUploadTask.mock.calls[0]?.[0]
++		expect(uploadArg?.file.name).toMatch(/^clipboard-image-.*\.png$/)
++		expect(uploadArg?.file.type).toBe('image/png')
++
++		await waitFor(() => {
++			expect(onFileUploaded).toHaveBeenCalledTimes(1)
++		})
++
++		expect(onFileUploaded.mock.calls[0]?.[0].name).toMatch(/^clipboard-image-.*\.png$/)
++	})
++
++	it('does not intercept image paste inside editable inputs', async () => {
++		render(
++			<>
++				<input aria-label='editable-input' />
++				<FileUpload onFileUploaded={vi.fn()} />
++			</>
++		)
++
++		const input = screen.getByLabelText('editable-input')
++		const pastedFile = new File(['image-data'], '', { type: 'image/png' })
++		const pasteEvent = createPasteEvent(pastedFile)
++
++		input.dispatchEvent(pasteEvent)
++
++		expect(pasteEvent.defaultPrevented).toBe(false)
++
++		await Promise.resolve()
++		expect(mockedUploadTask).not.toHaveBeenCalled()
++	})
++})
+diff --git a/apps/frontend/src/routes/_ocr/FileUpload.tsx b/apps/frontend/src/routes/_ocr/FileUpload.tsx
+index cd7b672..a3cdd6c 100644
+--- a/apps/frontend/src/routes/_ocr/FileUpload.tsx
++++ b/apps/frontend/src/routes/_ocr/FileUpload.tsx
+@@ -49,6 +49,8 @@ const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.pdf']
+ // 文件大小限制：20MB
+ const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB in bytes
+ 
++const CLIPBOARD_IMAGE_PREFIX = 'clipboard-image'
++
+ const inferMimeTypeByName = (name: string): string => {
+ 	const lowerName = name.toLowerCase()
+ 	if (lowerName.endsWith('.pdf')) return 'application/pdf'
+@@ -62,6 +64,42 @@ const normalizeFileType = (file: File): string => {
+ 	return inferMimeTypeByName(file.name)
+ }
+ 
++const getFileExtensionByMimeType = (mimeType: string): string => {
++	switch (mimeType) {
++		case 'image/jpeg':
++			return 'jpg'
++		case 'image/webp':
++			return 'webp'
++		default:
++			return 'png'
++	}
++}
++
++const createClipboardImageFile = (file: File): File => {
++	if (file.name) return file
++
++	const normalizedType = normalizeFileType(file) || 'image/png'
++	const extension = getFileExtensionByMimeType(normalizedType)
++	const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
++
++	return new File([file], `${CLIPBOARD_IMAGE_PREFIX}-${timestamp}.${extension}`, {
++		type: normalizedType,
++		lastModified: Date.now()
++	})
++}
++
++const isEditablePasteTarget = (target: EventTarget | null): boolean => {
++	if (!(target instanceof HTMLElement)) {
++		return false
++	}
++
++	if (target.isContentEditable) {
++		return true
++	}
++
++	return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
++}
++
+ // 验证文件类型
+ const isValidFileType = (file: File): boolean => {
+ 	// 检查 MIME 类型
+@@ -129,6 +167,27 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
+ 		}
+ 	}
+ 
++	const handlePaste = (e: ClipboardEvent) => {
++		if (isLoading || e.defaultPrevented || isEditablePasteTarget(e.target)) return
++
++		const clipboardItems = Array.from(e.clipboardData?.items ?? [])
++		const imageItem = clipboardItems.find(
++			item => item.kind === 'file' && item.type.startsWith('image/')
++		)
++
++		if (!imageItem) {
++			return
++		}
++
++		const pastedFile = imageItem.getAsFile()
++		if (!pastedFile) {
++			return
++		}
++
++		e.preventDefault()
++		void handleFile(createClipboardImageFile(pastedFile))
++	}
++
+ 	const handleFile = async (file: File) => {
+ 		// 验证文件类型
+ 		if (!isValidFileType(file)) {
+@@ -253,6 +312,13 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
+ 		}
+ 	}, [])
+ 
++	useEffect(() => {
++		window.addEventListener('paste', handlePaste)
++		return () => {
++			window.removeEventListener('paste', handlePaste)
++		}
++	}, [isLoading])
++
+ 	return (
+ 		<div className='h-full flex flex-col bg-white dark:bg-gray-900 border-r border-border'>
+ 			{/* 文件上传区域 */}
+@@ -282,6 +348,7 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
+ 						<>
+ 							<Upload className='size-12 mx-auto mb-4 text-gray-400' />
+ 							<p className='text-sm font-medium mb-1'>点击或拖拽文件到此处</p>
++							<p className='text-xs text-gray-500'>或按 Ctrl+V / Cmd+V 直接粘贴图片</p>
+ 							<p className='text-xs text-gray-500'>
+ 								格式：png/jpg/jpeg, pdf
+ 								{/* 格式：png/jpg/jpeg, pdf, doc, docx */}

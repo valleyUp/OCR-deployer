@@ -55,7 +55,12 @@ def test_extracts_inline_formula_candidates_from_text():
 
 def test_render_and_zip_exports_are_format_stable():
     assert normalize_latex(r"\[ a + b \]") == "a + b"
-    assert parse_formula_formats("tex,mml,png") == ["latex", "mathml", "png"]
+    assert parse_formula_formats("tex,mml,um,png") == [
+        "latex",
+        "mathml",
+        "unicodemath",
+        "png",
+    ]
 
     content, media_type, extension = render_formula_bytes("a+b", "latex")
     assert content == b"a+b"
@@ -72,6 +77,28 @@ def test_render_and_zip_exports_are_format_stable():
         ]
         manifest = json.loads(zip_file.read("manifest.json"))
         assert manifest["count"] == 1
+
+
+def test_unicodemath_falls_back_when_renderer_is_missing(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.formula_service._renderer_script",
+        lambda: "/nonexistent/formula-renderer.cjs",
+    )
+
+    content, media_type, extension = render_formula_bytes(
+        r"\frac{\alpha}{\beta}", "unicodemath"
+    )
+
+    text = content.decode("utf-8")
+    assert extension == "txt"
+    assert media_type.startswith("text/plain")
+    assert "α" in text and "β" in text
+    assert "\\frac" not in text
+
+
+def test_parse_formula_formats_accepts_unicodemath_aliases():
+    assert parse_formula_formats("unicode") == ["unicodemath"]
+    assert parse_formula_formats(["UM", "UnicodeMath"]) == ["unicodemath"]
 
 
 def test_rejects_obviously_invalid_latex():

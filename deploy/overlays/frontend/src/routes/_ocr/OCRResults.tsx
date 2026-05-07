@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { TaskResponse } from './FileUpload'
 import { MarkdownPreview } from '@/components/ocr/MarkdownPreview'
@@ -18,6 +18,11 @@ interface OCRResultsProps {
 
 export function OCRResults({ result, fileName }: OCRResultsProps) {
 	const setBlocks = useOcrStore(s => s.setBlocks)
+
+	type ResultTab = 'markdown' | 'json' | 'formulas'
+	const [activeTab, setActiveTab] = useState<ResultTab>('markdown')
+	const autoSwitchedRef = useRef(false)
+	const autoSwitchTaskRef = useRef<string | number | null>(null)
 
 	// 从真实数据中获取 layout 和 images，如果没有则使用 mock 数据
 	const layout = useMemo(() => result?.response?.layout || [], [result?.response?.layout])
@@ -98,6 +103,30 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 		}
 	}, [blocks, result?.status, setBlocks])
 
+	// 公式识别模式：解析完成后自动切到公式 Tab（每个任务仅自动切换一次）
+	useEffect(() => {
+		const taskId = result?.response?.task_id
+		if (taskId && autoSwitchTaskRef.current !== taskId) {
+			autoSwitchTaskRef.current = taskId ?? null
+			autoSwitchedRef.current = false
+		}
+		const processingMode = result?.response?.metadata?.processing_mode
+		if (
+			!autoSwitchedRef.current &&
+			result?.status === 'completed' &&
+			processingMode === 'formula' &&
+			formulas.length > 0
+		) {
+			setActiveTab('formulas')
+			autoSwitchedRef.current = true
+		}
+	}, [
+		result?.status,
+		result?.response?.task_id,
+		result?.response?.metadata?.processing_mode,
+		formulas.length
+	])
+
 	const handleCopy = () => {
 		if (!result?.response?.full_markdown) return
 		navigator.clipboard.writeText(result.response.full_markdown)
@@ -122,7 +151,10 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 
 	return (
 		<div className='h-screen flex flex-col bg-white border-l border-border'>
-			<Tabs defaultValue='markdown' className='flex-1 flex flex-col overflow-hidden'>
+			<Tabs
+				value={activeTab}
+				onValueChange={value => setActiveTab(value as ResultTab)}
+				className='flex-1 flex flex-col overflow-hidden'>
 				{/* 固定在顶部的 TabsList */}
 				<div className='px-4 pt-4 pb-0 bg-white sticky top-0 z-10 flex items-center justify-between'>
 					<TabsList className='grid grid-cols-3'>

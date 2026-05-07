@@ -175,9 +175,11 @@ export async function getTaskFormulas(taskId: string | number): Promise<TaskForm
 	return response.data.data
 }
 
+export type FormulaFormat = 'latex' | 'mathml' | 'unicodemath' | 'png'
+
 export async function renderFormula(
 	latex: string,
-	format: 'latex' | 'mathml' | 'png'
+	format: FormulaFormat
 ): Promise<Blob> {
 	const response = await api.post(
 		'/formulas/render',
@@ -187,9 +189,20 @@ export async function renderFormula(
 	return response.data
 }
 
+export async function renderFormulaText(
+	latex: string,
+	format: 'latex' | 'mathml' | 'unicodemath'
+): Promise<string> {
+	if (format === 'latex') {
+		return latex
+	}
+	const blob = await renderFormula(latex, format)
+	return blob.text()
+}
+
 export async function exportTaskFormulas(
 	taskId: string | number,
-	formats: Array<'latex' | 'mathml' | 'png'> = ['latex', 'mathml', 'png']
+	formats: FormulaFormat[] = ['latex', 'mathml', 'unicodemath', 'png']
 ): Promise<Blob> {
 	const response = await api.get(`/tasks/${taskId}/formulas/export`, {
 		params: { formats: formats.join(',') },

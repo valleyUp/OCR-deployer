@@ -33,8 +33,14 @@ LAYOUT_OCR_URL_EXPECTED="${LAYOUT_OCR_URL:-http://pipeline:5002/glmocr/parse}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-glm-ocr}"
 PIPELINE_LAYOUT_GPU_DEVICE_EXPECTED="${PIPELINE_LAYOUT_GPU_DEVICE:-0}"
 
+if docker compose version &>/dev/null; then
+    COMPOSE_CMD=(docker compose)
+else
+    COMPOSE_CMD=(docker-compose)
+fi
+
 run_compose() {
-    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+    "${COMPOSE_CMD[@]}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
 pass_count=0

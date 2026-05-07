@@ -1,0 +1,17 @@
+.git
+.serena
+.codex
+runtime
+*.log
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.pnpm-store
+
+upstream/glm-ocr/.git
+upstream/glm-ocr/.github
+upstream/glm-ocr/examples
+upstream/glm-ocr/apps/frontend/node_modules
+upstream/glm-ocr/apps/frontend/dist
+upstream/glm-ocr/apps/backend/.venv

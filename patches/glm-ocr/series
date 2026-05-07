@@ -1,7 +1,3 @@
-0001-add-dockerfile-pipeline.patch
-0002-backend-use-layout-ocr-url-env.patch
-0003-backend-handle-missing-page-size.patch
-0004-frontend-fix-network-and-offline-pdf-preview.patch
-0005-frontend-support-clipboard-image-paste.patch
-0006-build-use-tuna-pypi-index.patch
-0007-frontend-dockerfile-fix-from-as-casing.patch
+# Compatibility patch queue.
+# Normal builds use deploy/images/* plus deploy/overlays/* and do not modify
+# upstream/glm-ocr.

@@ -36,7 +36,11 @@ else
     exit 1
 fi
 
-"${SCRIPT_DIR}/patch-queue-apply.sh"
+if [[ -n "$(git -C "${UPSTREAM_DIR}" status --short)" ]]; then
+    echo "Upstream worktree is dirty; overlay builds require a clean upstream source." >&2
+    git -C "${UPSTREAM_DIR}" status --short >&2
+    exit 1
+fi
 
 docker build \
     --build-arg PYPI_INDEX_URL="${PYPI_INDEX_URL}" \
@@ -46,16 +50,19 @@ docker build \
 docker build \
     --build-arg PYPI_INDEX_URL="${PYPI_INDEX_URL}" \
     -t "${PIPELINE_IMAGE}" \
-    -f "${REPO_ROOT}/upstream/glm-ocr/Dockerfile.pipeline" \
-    "${REPO_ROOT}/upstream/glm-ocr"
+    -f "${REPO_ROOT}/deploy/images/pipeline/Dockerfile" \
+    "${REPO_ROOT}"
 docker build \
     --build-arg PYPI_INDEX_URL="${PYPI_INDEX_URL}" \
+    --build-arg NPM_REGISTRY_URL="${NPM_REGISTRY_URL:-https://registry.npmmirror.com}" \
     -t "${BACKEND_IMAGE}" \
-    -f "${REPO_ROOT}/upstream/glm-ocr/apps/backend/Dockerfile" \
-    "${REPO_ROOT}/upstream/glm-ocr/apps/backend"
-docker build -t "${FRONTEND_IMAGE}" -f "${REPO_ROOT}/upstream/glm-ocr/apps/frontend/Dockerfile" "${REPO_ROOT}/upstream/glm-ocr/apps/frontend"
-
-bash "${SCRIPT_DIR}/patch-queue-clean.sh"
+    -f "${REPO_ROOT}/deploy/images/backend/Dockerfile" \
+    "${REPO_ROOT}"
+docker build \
+    --build-arg NPM_REGISTRY_URL="${NPM_REGISTRY_URL:-https://registry.npmmirror.com}" \
+    -t "${FRONTEND_IMAGE}" \
+    -f "${REPO_ROOT}/deploy/images/frontend/Dockerfile" \
+    "${REPO_ROOT}"
 
 echo "Built images:"
 echo "  ${VLLM_IMAGE}"

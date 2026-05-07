@@ -9,20 +9,25 @@ ENV_EXAMPLE="${REPO_ROOT}/deploy/.env.example"
 ENV_FILE="${REPO_ROOT}/deploy/.env"
 ACTION="${1:-up}"
 
-mkdir -p "${REPO_ROOT}/runtime/huggingface" "${REPO_ROOT}/runtime/backend-data"
-
-if [[ ! -f "${ENV_FILE}" && -f "${ENV_EXAMPLE}" ]]; then
-    cp "${ENV_EXAMPLE}" "${ENV_FILE}"
-    echo "Created ${ENV_FILE} from .env.example"
-fi
-
 if docker compose version &>/dev/null; then
     COMPOSE_CMD="docker compose"
 else
     COMPOSE_CMD="docker-compose"
 fi
 
+ensure_env() {
+    if [[ ! -f "${ENV_FILE}" && -f "${ENV_EXAMPLE}" ]]; then
+        cp "${ENV_EXAMPLE}" "${ENV_FILE}"
+        echo "Created ${ENV_FILE} from .env.example"
+    fi
+}
+
+ensure_runtime_dirs() {
+    mkdir -p "${REPO_ROOT}/runtime/huggingface" "${REPO_ROOT}/runtime/backend-data"
+}
+
 run_compose() {
+    ensure_env
     ${COMPOSE_CMD} --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
@@ -44,8 +49,8 @@ ensure_upstream() {
 
 case "${ACTION}" in
     up|start)
+        ensure_runtime_dirs
         ensure_upstream
-        "${SCRIPT_DIR}/patch-queue-apply.sh"
         run_compose up -d
         ;;
     down|stop)
@@ -68,6 +73,10 @@ case "${ACTION}" in
         shift || true
         "${SCRIPT_DIR}/save-images.sh" "$@"
         ;;
+    check-patches|patch-queue-check)
+        ensure_upstream
+        "${SCRIPT_DIR}/patch-queue-check.sh"
+        ;;
     pull-submodule)
         ensure_upstream
         if git -C "${REPO_ROOT}" ls-files --stage -- upstream/glm-ocr | rg -q .; then
@@ -75,10 +84,9 @@ case "${ACTION}" in
         else
             git -C "${REPO_ROOT}/upstream/glm-ocr" pull --ff-only
         fi
-        "${SCRIPT_DIR}/patch-queue-apply.sh"
         ;;
     *)
-        echo "Usage: $0 {up|down|restart|logs|status|build-images|save-images|pull-submodule}" >&2
+        echo "Usage: $0 {up|down|restart|logs|status|build-images|save-images|check-patches|pull-submodule}" >&2
         exit 1
         ;;
 esac

@@ -79,6 +79,7 @@ export interface TaskStatusData {
 	progress?: number
 	current_stage?: string | null
 	current_step?: string | null
+	execution_time?: number
 	created_at: string
 	started_at?: string
 	completed_at?: string

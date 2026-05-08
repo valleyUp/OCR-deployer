@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileUpload, type TaskResponse, type UploadedFile } from './FileUpload'
 import { FilePreview } from './FilePreview'
 import { OCRResults } from './OCRResults'
@@ -56,11 +56,13 @@ function recordToTaskResponse(record: HistoryRecord): TaskResponse | null {
 
 export function OCRPage() {
 	const [currentLocalId, setCurrentLocalId] = useState<string | null>(null)
-	const [historyPreview, setHistoryPreview] = useState<{
-		file: UploadedFile
-		result: TaskResponse | null
-	} | null>(null)
 	const [resultsWidth, setResultsWidth] = useState<number>(RESULTS_WIDTH_DEFAULT)
+
+	// Live uploads have real File references that cannot be serialised
+	// into history. Keep a side-map so FilePreview can render before the
+	// task completes.
+	const liveFilesRef = useRef<Map<string, UploadedFile>>(new Map())
+	const [, setLiveFilesVersion] = useState(0)
 
 	const ensureConfigLoaded = useConfigStore(s => s.ensureLoaded)
 	const records = useHistoryStore(s => s.records)
@@ -78,20 +80,22 @@ export function OCRPage() {
 	)
 
 	const uploadFile: UploadedFile | null = useMemo(() => {
-		if (historyPreview?.file && historyPreview.file.id === currentLocalId) {
-			return historyPreview.file
+		if (currentLocalId && liveFilesRef.current.has(currentLocalId)) {
+			return liveFilesRef.current.get(currentLocalId)!
 		}
 		if (activeRecord) return recordToUploadedFile(activeRecord)
 		return null
-	}, [activeRecord, historyPreview, currentLocalId])
+	}, [activeRecord, currentLocalId])
 
 	const parsedResult: TaskResponse | null = useMemo(() => {
-		if (historyPreview && historyPreview.file.id === currentLocalId) {
-			return historyPreview.result
-		}
 		if (activeRecord) return recordToTaskResponse(activeRecord)
 		return null
-	}, [activeRecord, historyPreview, currentLocalId])
+	}, [activeRecord])
+
+	const handleFileReady = useCallback((uploadedFile: UploadedFile) => {
+		liveFilesRef.current.set(uploadedFile.id, uploadedFile)
+		setLiveFilesVersion(v => v + 1)
+	}, [])
 
 	const persistResultsWidth = (next: number) => {
 		try {
@@ -106,11 +110,6 @@ export function OCRPage() {
 		persistResultsWidth(RESULTS_WIDTH_DEFAULT)
 	}
 
-	const handleHistorySelect = (record: HistoryRecord) => {
-		setHistoryPreview(null)
-		setCurrentLocalId(record.localId)
-	}
-
 	return (
 		<div className='flex h-screen flex-col overflow-hidden bg-zinc-50'>
 			<AppHeader uploadFile={uploadFile} result={parsedResult} />
@@ -120,13 +119,13 @@ export function OCRPage() {
 					<FileUpload
 						currentLocalId={currentLocalId}
 						onActiveTaskChange={localId => {
-							setHistoryPreview(null)
 							setCurrentLocalId(localId)
 						}}
+						onFileReady={handleFileReady}
 					/>
 					<HistoryPanel
 						currentLocalId={currentLocalId}
-						onSelect={handleHistorySelect}
+						onSelect={record => setCurrentLocalId(record.localId)}
 					/>
 				</aside>
 

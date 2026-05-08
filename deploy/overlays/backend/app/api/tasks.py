@@ -273,6 +273,7 @@ async def get_task_status(task_id: str):
                 result_data.get("layout"),
                 task_id=task_id,
             )
+            response_data["execution_time"] = result_data.get("execution_time")
 
         return ApiResponse(
             success=True,

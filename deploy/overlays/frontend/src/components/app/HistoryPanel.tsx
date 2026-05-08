@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
 	AlertCircle,
 	Check,
-	ChevronDown,
-	ChevronUp,
 	ClipboardCopy,
 	Clock,
 	FileText,
@@ -225,7 +223,6 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 	const remove = useHistoryStore(s => s.remove)
 	const loadResult = useHistoryStore(s => s.loadResult)
 
-	const [collapsed, setCollapsed] = useState(false)
 	const [confirmClear, setConfirmClear] = useState(false)
 
 	useEffect(() => {
@@ -252,11 +249,7 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 	return (
 		<div className='flex min-h-0 flex-1 flex-col border-t border-border bg-white'>
 			<div className='flex items-center justify-between gap-2 border-b border-border px-3 py-2'>
-				<button
-					type='button'
-					onClick={() => setCollapsed(v => !v)}
-					className='flex flex-1 items-center gap-1.5 text-left text-[12px] font-semibold tracking-tight text-foreground/90'
-					aria-expanded={!collapsed}>
+				<div className='flex flex-1 items-center gap-1.5 text-[12px] font-semibold tracking-tight text-foreground/90'>
 					<History className='size-3.5 text-muted-foreground' />
 					历史记录
 					<Badge
@@ -264,14 +257,7 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 						className='h-4 rounded-full px-1.5 text-[10px] font-normal'>
 						{records.length}
 					</Badge>
-					<span className='ml-auto text-muted-foreground'>
-						{collapsed ? (
-							<ChevronDown className='size-3.5' />
-						) : (
-							<ChevronUp className='size-3.5' />
-						)}
-					</span>
-				</button>
+				</div>
 				{records.length > 0 && (
 					<Button
 						variant='ghost'
@@ -284,25 +270,23 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 				)}
 			</div>
 
-			{!collapsed && (
-				<div className='flex-1 overflow-auto'>
-					{records.length === 0 ? (
-						<div className='flex h-full min-h-[6rem] items-center justify-center px-4 py-6 text-center text-[11px] text-muted-foreground'>
-							还没有识别任务
-						</div>
-					) : (
-						records.map(record => (
-							<HistoryItem
-								key={record.localId}
-								record={record}
-								active={active?.localId === record.localId}
-								onSelect={() => void handleSelect(record)}
-								onDelete={() => void remove(record.localId)}
-							/>
-						))
-					)}
-				</div>
-			)}
+			<div className='flex-1 overflow-auto'>
+				{records.length === 0 ? (
+					<div className='flex h-full min-h-[6rem] items-center justify-center px-4 py-6 text-center text-[11px] text-muted-foreground'>
+						还没有识别任务
+					</div>
+				) : (
+					records.map(record => (
+						<HistoryItem
+							key={record.localId}
+							record={record}
+							active={active?.localId === record.localId}
+							onSelect={() => void handleSelect(record)}
+							onDelete={() => void remove(record.localId)}
+						/>
+					))
+				)}
+			</div>
 
 			<Dialog open={confirmClear} onOpenChange={setConfirmClear}>
 				<DialogContent className='sm:max-w-[380px]'>

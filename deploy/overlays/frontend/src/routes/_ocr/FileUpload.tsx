@@ -48,6 +48,7 @@ export interface TaskResponse {
 interface FileUploadProps {
 	currentLocalId: string | null
 	onActiveTaskChange: (localId: string | null) => void
+	onFileReady?: (uploadedFile: UploadedFile) => void
 }
 
 const ALLOWED_FILE_TYPES = [
@@ -160,7 +161,8 @@ function taskStatusToHistory(status: TaskStatus): HistoryRecord['status'] {
 
 export function FileUpload({
 	currentLocalId,
-	onActiveTaskChange
+	onActiveTaskChange,
+	onFileReady
 }: FileUploadProps) {
 	const upsertHistory = useHistoryStore(s => s.upsert)
 	const historyRecords = useHistoryStore(s => s.records)
@@ -199,7 +201,7 @@ export function FileUpload({
 			const status = taskStatusToHistory(response.status)
 			const stage = response.current_stage ?? response.current_step ?? undefined
 			const progress = response.progress ?? undefined
-			const executionTime = response.result?.execution_time
+			const executionTime = response.execution_time
 			const totalPages = response.metadata?.total_pages
 			await upsertHistory({
 				localId,
@@ -274,6 +276,20 @@ export function FileUpload({
 
 		await upsertHistory(baseRecord)
 		onActiveTaskChange(localId)
+
+		// Provide the real File reference for the preview pane while the
+		// task is still processing (history records cannot hold File objects).
+		const now = new Date()
+		onFileReady?.({
+			id: localId,
+			name: file.name,
+			size: file.size,
+			type: normalizeFileType(file),
+			file,
+			uploadTime: now,
+			error: null,
+			processingMode
+		})
 
 		try {
 			const response = await uploadTask({

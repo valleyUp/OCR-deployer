@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { FileUpload, type TaskResponse, type UploadedFile } from './FileUpload'
 import { FilePreview } from './FilePreview'
 import { OCRResults } from './OCRResults'
 import { AppHeader } from '@/components/app/AppHeader'
+import { HistoryPanel } from '@/components/app/HistoryPanel'
 import { ResizableDivider } from '@/components/app/ResizableDivider'
+import { useHistoryStore } from '@/store/useHistoryStore'
+import { useConfigStore } from '@/store/useConfigStore'
+import type { HistoryRecord } from '@/libs/historyDb'
 import '@/styles-overlay.css'
 
 const RESULTS_WIDTH_KEY = 'ocr-deployer:resultsWidth'
@@ -24,20 +28,76 @@ function readStoredWidth(): number {
 	}
 }
 
+function recordToUploadedFile(record: HistoryRecord): UploadedFile {
+	const placeholder = new File([], record.fileName, {
+		type: record.fileType || 'application/octet-stream'
+	})
+	return {
+		id: record.localId,
+		name: record.fileName,
+		size: record.fileSize,
+		type: record.fileType,
+		file: placeholder,
+		uploadTime: new Date(record.createdAt),
+		error: record.errorMessage ?? null,
+		processingMode: record.processingMode
+	}
+}
+
+function recordToTaskResponse(record: HistoryRecord): TaskResponse | null {
+	if (!record.result) return null
+	return {
+		fileId: record.localId,
+		status: record.status === 'completed' ? 'completed' : 'failed',
+		response: record.result,
+		error_message: record.errorMessage ?? null
+	}
+}
+
 export function OCRPage() {
-	const [uploadFile, setUploadFile] = useState<UploadedFile | null>(null)
-	const [parsedResult, setParsedResult] = useState<TaskResponse | null>(null)
+	const [currentLocalId, setCurrentLocalId] = useState<string | null>(null)
+	const [historyPreview, setHistoryPreview] = useState<{
+		file: UploadedFile
+		result: TaskResponse | null
+	} | null>(null)
 	const [resultsWidth, setResultsWidth] = useState<number>(RESULTS_WIDTH_DEFAULT)
+
+	const ensureConfigLoaded = useConfigStore(s => s.ensureLoaded)
+	const records = useHistoryStore(s => s.records)
+	const hydrate = useHistoryStore(s => s.hydrate)
 
 	useEffect(() => {
 		setResultsWidth(readStoredWidth())
-	}, [])
+		void ensureConfigLoaded()
+		void hydrate()
+	}, [ensureConfigLoaded, hydrate])
+
+	const activeRecord = useMemo(
+		() => records.find(r => r.localId === currentLocalId) ?? null,
+		[records, currentLocalId]
+	)
+
+	const uploadFile: UploadedFile | null = useMemo(() => {
+		if (historyPreview?.file && historyPreview.file.id === currentLocalId) {
+			return historyPreview.file
+		}
+		if (activeRecord) return recordToUploadedFile(activeRecord)
+		return null
+	}, [activeRecord, historyPreview, currentLocalId])
+
+	const parsedResult: TaskResponse | null = useMemo(() => {
+		if (historyPreview && historyPreview.file.id === currentLocalId) {
+			return historyPreview.result
+		}
+		if (activeRecord) return recordToTaskResponse(activeRecord)
+		return null
+	}, [activeRecord, historyPreview, currentLocalId])
 
 	const persistResultsWidth = (next: number) => {
 		try {
 			window.localStorage.setItem(RESULTS_WIDTH_KEY, String(next))
 		} catch {
-			/* ignore quota / privacy-mode errors */
+			/* ignore */
 		}
 	}
 
@@ -46,15 +106,27 @@ export function OCRPage() {
 		persistResultsWidth(RESULTS_WIDTH_DEFAULT)
 	}
 
+	const handleHistorySelect = (record: HistoryRecord) => {
+		setHistoryPreview(null)
+		setCurrentLocalId(record.localId)
+	}
+
 	return (
 		<div className='flex h-screen flex-col overflow-hidden bg-zinc-50'>
 			<AppHeader uploadFile={uploadFile} result={parsedResult} />
 
 			<div className='flex min-h-0 flex-1 overflow-hidden'>
-				<aside className='w-60 shrink-0 border-r border-border bg-white'>
+				<aside className='flex w-60 shrink-0 flex-col overflow-hidden border-r border-border bg-white'>
 					<FileUpload
-						onFileUploaded={file => setUploadFile(file)}
-						onTaskStatusChange={data => setParsedResult(data)}
+						currentLocalId={currentLocalId}
+						onActiveTaskChange={localId => {
+							setHistoryPreview(null)
+							setCurrentLocalId(localId)
+						}}
+					/>
+					<HistoryPanel
+						currentLocalId={currentLocalId}
+						onSelect={handleHistorySelect}
 					/>
 				</aside>
 

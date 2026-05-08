@@ -78,6 +78,7 @@ export interface TaskStatusData {
 	processing_mode?: 'pipeline' | 'formula' | string
 	progress?: number
 	current_stage?: string | null
+	current_step?: string | null
 	created_at: string
 	started_at?: string
 	completed_at?: string
@@ -226,6 +227,19 @@ export async function getTaskStatus(taskId: string | number): Promise<TaskStatus
 	}
 
 	return response.data.data
+}
+
+export interface AppConfig {
+	max_upload_mb: number
+	worker_count: number
+	max_concurrent_tasks: number
+	layout_page_parallelism: number
+	task_timeout: number
+}
+
+export async function getAppConfig(): Promise<AppConfig> {
+	const response = await api.get<AppConfig>('/config')
+	return response.data
 }
 
 export default api

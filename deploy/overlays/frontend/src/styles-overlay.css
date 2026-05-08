@@ -1,21 +1,43 @@
 /*
- * Overlay-only global tweaks that the upstream styles.css does not provide:
- *   - unified focus-visible outline
- *   - reduced-motion override
- *   - relax the upstream body { min-width: 1200px } so the deployer shell
- *     looks reasonable at laptop widths (the fixed sidebar + flex main
- *     panels now scale on their own).
+ * Scheme A — Minimal Neutral: overlay animations and element overrides.
  */
 
+/* ---- Keyframe animations ---- */
+@keyframes shimmer {
+	0% { background-position: 200% 0; }
+	100% { background-position: -200% 0; }
+}
+
+@keyframes dotPulse {
+	0%, 100% { box-shadow: 0 0 0 0 var(--ring); }
+	50% { box-shadow: 0 0 0 6px transparent; }
+}
+
+@keyframes stepPulse {
+	0%, 100% { box-shadow: 0 0 0 0 var(--ring); }
+	50% { box-shadow: 0 0 0 8px transparent; }
+}
+
+@keyframes fadeUp {
+	from { opacity: 0; transform: translateY(8px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Global overrides ---- */
 html,
 body {
 	min-width: 960px;
 }
 
 *:focus-visible {
-	outline: 2px solid oklch(0.56 0.2 262);
-	outline-offset: 2px;
-	border-radius: 4px;
+	outline: 2px solid var(--primary);
+	outline-offset: 3px;
+	border-radius: 6px;
+}
+
+::selection {
+	background: #E8ECF2;
+	color: #15161A;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -29,6 +51,7 @@ body {
 	}
 }
 
+/* ---- kbd ---- */
 kbd {
 	display: inline-flex;
 	align-items: center;
@@ -37,12 +60,62 @@ kbd {
 	padding: 0 0.35rem;
 	height: 1.25rem;
 	border-radius: 0.35rem;
-	border: 1px solid oklch(0.88 0.005 286);
-	background: oklch(0.98 0.002 286);
-	box-shadow: 0 1px 0 oklch(0.88 0.005 286);
-	color: oklch(0.32 0.01 286);
-	font-family: inherit;
+	border: 1px solid rgba(22,22,26,.12);
+	background: #EEECE4;
+	box-shadow: inset 0 -1px 0 rgba(22,22,26,.10);
+	color: #58585A;
+	font-family: 'Geist Mono', ui-monospace, monospace;
 	font-size: 0.72rem;
 	font-weight: 500;
 	line-height: 1;
+}
+
+/* ---- Skeleton shimmer ---- */
+.skeleton-shimmer {
+	background: linear-gradient(110deg, #EEECE4 30%, #F2F0EA 50%, #EEECE4 70%);
+	background-size: 200% 100%;
+	animation: shimmer 1.6s linear infinite;
+}
+
+/* ---- Progress shimmer (for progress bars) ---- */
+.progress-shimmer {
+	background: linear-gradient(110deg, var(--primary) 30%, #2D5A8E 50%, var(--primary) 70%);
+	background-size: 200% 100%;
+	animation: shimmer 2s linear infinite;
+}
+
+/* ---- Staggered fade-up for history items ---- */
+.history-enter {
+	animation: fadeUp 260ms cubic-bezier(.16,1,.3,1) both;
+}
+
+/* ---- Dot pulse for status indicators ---- */
+.dot-pulse {
+	animation: dotPulse 1.6s cubic-bezier(.85,0,.15,1) infinite;
+}
+
+/* ---- Step pulse for active pipeline step ---- */
+.step-pulse {
+	animation: stepPulse 1.8s cubic-bezier(.85,0,.15,1) infinite;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: rgba(22,22,26,.12);
+	border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: rgba(22,22,26,.22);
+}
+
+/* ---- Dialog / Modal backdrop ---- */
+[data-sonner-toaster] {
+	font-family: 'Geist', ui-sans-serif, system-ui, sans-serif !important;
 }

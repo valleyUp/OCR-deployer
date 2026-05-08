@@ -36,28 +36,33 @@ export function AppHeader({ uploadFile, result }: AppHeaderProps) {
 	const modeLabel = MODE_LABELS[activeMode] ?? activeMode
 
 	return (
-		<header className='sticky top-0 z-40 flex h-12 shrink-0 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur-sm'>
-			<div className='flex items-center gap-2.5'>
-				<span className='flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground'>
-					<Sigma className='size-4' />
+		<header className='sticky top-0 z-40 flex h-[60px] shrink-0 items-center justify-between border-b border-border bg-card/90 px-6 backdrop-blur-md'>
+			<div className='flex items-center gap-3'>
+				<span className='flex size-[30px] items-center justify-center rounded-md bg-foreground text-card shadow-sm'
+					style={{ fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 500, letterSpacing: '-0.02em' }}>
+					G
 				</span>
-				<div className='flex items-baseline gap-1'>
-					<span className='text-[15px] font-semibold tracking-tight text-foreground'>
+				<div className='flex items-baseline gap-1.5'>
+					<span className='text-[18px] font-medium tracking-tight text-foreground'
+						style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.025em' }}>
 						GLM-OCR
 					</span>
-					<span className='text-[11px] text-muted-foreground'>Studio</span>
+					<span className='rounded-full bg-secondary px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-widest text-muted-foreground'>
+						Studio
+					</span>
 				</div>
 			</div>
 
 			<div className='flex items-center gap-2'>
 				<Badge
 					variant='outline'
-					className='h-7 gap-1.5 rounded-full border-border px-3 text-[12px] font-medium text-foreground/80'>
+					className='h-[30px] gap-2 rounded-full border-border bg-card px-3 text-[12.5px] font-medium text-muted-foreground transition-all duration-150 hover:-translate-y-px hover:shadow-sm'>
 					<span
 						className={cn(
 							'size-1.5 rounded-full',
-							activeMode === 'formula' ? 'bg-violet-500' : 'bg-emerald-500'
+							activeMode === 'formula' ? 'bg-primary' : 'bg-emerald-600'
 						)}
+						style={activeMode === 'formula' ? { boxShadow: '0 0 0 3px rgba(28,58,94,.18)' } : { boxShadow: '0 0 0 3px rgba(46,125,91,.18)' }}
 					/>
 					{modeLabel}
 				</Badge>
@@ -68,7 +73,7 @@ export function AppHeader({ uploadFile, result }: AppHeaderProps) {
 							variant='ghost'
 							size='icon-sm'
 							aria-label='打开帮助'
-							className='text-foreground/70 hover:text-foreground'>
+							className='size-[34px] rounded-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-all duration-150 active:scale-[.94]'>
 							<HelpCircle className='size-4' />
 						</Button>
 					</DialogTrigger>

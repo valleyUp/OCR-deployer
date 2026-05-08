@@ -161,8 +161,6 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 		result?.response?.metadata?.processing_mode
 	])
 
-	// When the user clicks a formula block in the preview pane, switch the
-	// active tab to "formulas" so the matching card is visible.
 	const clickedPdfBlockId = useOcrStore(s => s.clickedPdfBlockId)
 	useEffect(() => {
 		if (clickedPdfBlockId === null) return
@@ -253,28 +251,28 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 			: []
 
 	return (
-		<div className='flex h-full flex-col bg-white'>
+		<div className='flex h-full flex-col bg-card'>
 			<Tabs
 				value={activeTab}
 				onValueChange={value => setActiveTab(value as ResultTab)}
 				className='flex flex-1 flex-col overflow-hidden'>
-				<div className='sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-white/95 px-4 py-3 backdrop-blur-sm'>
-					<TabsList className='h-9 gap-0.5 rounded-full bg-zinc-100 p-1'>
+				<div className='sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-card/95 px-4 py-3 backdrop-blur-sm'>
+					<TabsList className='h-9 gap-0.5 rounded-full bg-secondary p-1'>
 						<TabsTrigger
 							value='markdown'
-							className='h-7 cursor-pointer rounded-full px-3 text-[12.5px] font-medium transition-[background-color,color,box-shadow] duration-200 data-[state=active]:bg-white data-[state=active]:shadow-sm'>
+							className='h-7 cursor-pointer rounded-full px-3 text-[12.5px] font-medium transition-all duration-200 data-[state=active]:bg-card data-[state=active]:shadow-sm'>
 							<AppWindowIcon className='size-3.5' />
 							Markdown
 						</TabsTrigger>
 						<TabsTrigger
 							value='json'
-							className='h-7 cursor-pointer rounded-full px-3 text-[12.5px] font-medium transition-[background-color,color,box-shadow] duration-200 data-[state=active]:bg-white data-[state=active]:shadow-sm'>
+							className='h-7 cursor-pointer rounded-full px-3 text-[12.5px] font-medium transition-all duration-200 data-[state=active]:bg-card data-[state=active]:shadow-sm'>
 							<FileJsonIcon className='size-3.5' />
 							JSON
 						</TabsTrigger>
 						<TabsTrigger
 							value='formulas'
-							className='h-7 cursor-pointer rounded-full px-3 text-[12.5px] font-medium transition-[background-color,color,box-shadow] duration-200 data-[state=active]:bg-white data-[state=active]:shadow-sm'>
+							className='h-7 cursor-pointer rounded-full px-3 text-[12.5px] font-medium transition-all duration-200 data-[state=active]:bg-card data-[state=active]:shadow-sm'>
 							<Sigma className='size-3.5' />
 							公式
 						</TabsTrigger>
@@ -311,14 +309,15 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 				</div>
 
 				{metaBadges.length > 0 && (
-					<div className='flex flex-wrap items-center gap-1.5 border-b border-border bg-white/80 px-4 py-2'>
+					<div className='flex flex-wrap items-center gap-1.5 border-b border-border bg-card/80 px-4 py-2'>
 						{metaBadges.map(item => {
 							const Icon = item.icon
 							return (
 								<Badge
 									key={item.key}
 									variant='outline'
-									className='h-6 gap-1 rounded-full border-border px-2 text-[11px] font-normal text-muted-foreground'>
+									className='h-6 gap-1 rounded-full border-border px-2 text-[11px] font-normal text-muted-foreground'
+									style={{ fontFamily: 'var(--font-mono)' }}>
 									<Icon className='size-3' />
 									{item.label}
 								</Badge>
@@ -365,7 +364,7 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 					<TabsContent value='json' className='h-full m-0 mt-0 overflow-auto'>
 						<div className={cn('p-4')}>
 							{response && status === 'completed' ? (
-								<div className='overflow-auto rounded-lg bg-zinc-50 p-4'>
+								<div className='overflow-auto rounded-lg bg-secondary p-4'>
 									<JsonPreview json={response} />
 								</div>
 							) : status === 'pending' || status === 'processing' ? (

@@ -16,8 +16,8 @@ if [[ ! -e "${SUBMODULE_DIR}/.git" ]]; then
     exit 1
 fi
 
-GIT_DIR="$(git -C "${SUBMODULE_DIR}" rev-parse --git-dir)"
-STATE_FILE="${GIT_DIR}/patch-queue-state"
+STATE_DIR="${REPO_ROOT}/runtime/patch-queue-state"
+STATE_FILE="${STATE_DIR}/glm-ocr.state"
 
 if [[ ! -f "${SERIES_FILE}" ]]; then
     echo "No patch queue found at ${SERIES_FILE}, skipped."
@@ -69,13 +69,13 @@ for (( idx=${#patch_names[@]}-1; idx>=0; idx-- )); do
         exit 1
     fi
 
-    if git -C "${SUBMODULE_DIR}" apply --check --reverse "${patch_path}" >/dev/null 2>&1; then
-        git -C "${SUBMODULE_DIR}" apply --reverse "${patch_path}"
+    if git -C "${SUBMODULE_DIR}" apply --whitespace=nowarn --check --reverse "${patch_path}" >/dev/null 2>&1; then
+        git -C "${SUBMODULE_DIR}" apply --whitespace=nowarn --reverse "${patch_path}"
         echo "Cleaned: ${patch_name}"
         continue
     fi
 
-    if git -C "${SUBMODULE_DIR}" apply --check "${patch_path}" >/dev/null 2>&1; then
+    if git -C "${SUBMODULE_DIR}" apply --whitespace=nowarn --check "${patch_path}" >/dev/null 2>&1; then
         echo "Already clean: ${patch_name}"
         continue
     fi
@@ -89,4 +89,6 @@ for clean_path in "${GENERATED_CLEAN_PATHS[@]}"; do
 done
 
 rm -f "${STATE_FILE}"
+rmdir "${STATE_DIR}" 2>/dev/null || true
+rmdir "${REPO_ROOT}/runtime" 2>/dev/null || true
 echo "Patch queue cleaned for ${SUBMODULE_DIR}"

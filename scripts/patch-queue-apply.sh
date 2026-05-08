@@ -13,8 +13,8 @@ if [[ ! -e "${SUBMODULE_DIR}/.git" ]]; then
     exit 1
 fi
 
-GIT_DIR="$(git -C "${SUBMODULE_DIR}" rev-parse --git-dir)"
-STATE_FILE="${GIT_DIR}/patch-queue-state"
+STATE_DIR="${REPO_ROOT}/runtime/patch-queue-state"
+STATE_FILE="${STATE_DIR}/glm-ocr.state"
 
 if [[ ! -f "${SERIES_FILE}" ]]; then
     echo "No patch queue found at ${SERIES_FILE}, skipped."
@@ -40,8 +40,12 @@ compute_queue_state() {
 DESIRED_STATE="$(compute_queue_state)"
 
 if [[ -f "${STATE_FILE}" ]] && [[ "$(cat "${STATE_FILE}")" == "${DESIRED_STATE}" ]]; then
-    echo "Patch queue already applied for ${SUBMODULE_DIR}"
-    exit 0
+    if git -C "${SUBMODULE_DIR}" diff --quiet --; then
+        echo "Patch queue state is stale for ${SUBMODULE_DIR}; rechecking."
+    else
+        echo "Patch queue already applied for ${SUBMODULE_DIR}"
+        exit 0
+    fi
 fi
 
 while IFS= read -r patch_name || [[ -n "${patch_name}" ]]; do
@@ -54,17 +58,18 @@ while IFS= read -r patch_name || [[ -n "${patch_name}" ]]; do
         exit 1
     fi
 
-    if git -C "${SUBMODULE_DIR}" apply --check --reverse "${patch_path}" >/dev/null 2>&1; then
+    if git -C "${SUBMODULE_DIR}" apply --whitespace=nowarn --check --reverse "${patch_path}" >/dev/null 2>&1; then
         echo "Already applied: ${patch_name}"
         continue
     fi
 
-    if git -C "${SUBMODULE_DIR}" apply --check "${patch_path}" >/dev/null 2>&1; then
-        git -C "${SUBMODULE_DIR}" apply "${patch_path}"
+    if git -C "${SUBMODULE_DIR}" apply --whitespace=nowarn --check "${patch_path}" >/dev/null 2>&1; then
+        git -C "${SUBMODULE_DIR}" apply --whitespace=nowarn "${patch_path}"
     else
-        git -C "${SUBMODULE_DIR}" apply --3way "${patch_path}"
+        git -C "${SUBMODULE_DIR}" apply --whitespace=nowarn --3way "${patch_path}"
     fi
     echo "Applied: ${patch_name}"
 done < "${SERIES_FILE}"
 
+mkdir -p "${STATE_DIR}"
 printf '%s\n' "${DESIRED_STATE}" > "${STATE_FILE}"

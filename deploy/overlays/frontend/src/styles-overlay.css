@@ -1,0 +1,48 @@
+/*
+ * Overlay-only global tweaks that the upstream styles.css does not provide:
+ *   - unified focus-visible outline
+ *   - reduced-motion override
+ *   - relax the upstream body { min-width: 1200px } so the deployer shell
+ *     looks reasonable at laptop widths (the fixed sidebar + flex main
+ *     panels now scale on their own).
+ */
+
+html,
+body {
+	min-width: 960px;
+}
+
+*:focus-visible {
+	outline: 2px solid oklch(0.56 0.2 262);
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 1ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 1ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+kbd {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1.5rem;
+	padding: 0 0.35rem;
+	height: 1.25rem;
+	border-radius: 0.35rem;
+	border: 1px solid oklch(0.88 0.005 286);
+	background: oklch(0.98 0.002 286);
+	box-shadow: 0 1px 0 oklch(0.88 0.005 286);
+	color: oklch(0.32 0.01 286);
+	font-family: inherit;
+	font-size: 0.72rem;
+	font-weight: 500;
+	line-height: 1;
+}

@@ -241,6 +241,12 @@ async def get_task_status(task_id: str):
             logger.info(f"Loaded result data for task {task_id}")
 
         # 构建响应数据
+        started_at = task_info.get("started_at")
+        completed_at = task_info.get("completed_at")
+        execution_time = None
+        if started_at and completed_at:
+            execution_time = (completed_at - started_at).total_seconds()
+
         response_data = {
             "task_id": task_info.get("task_id"),
             "document_id": task_info.get("document_id"),
@@ -249,10 +255,11 @@ async def get_task_status(task_id: str):
             "current_step": task_info.get("current_step"),
             "current_stage": task_info.get("current_step"),
             "created_at": task_info.get("created_at").isoformat() if task_info.get("created_at") else None,
-            "started_at": task_info.get("started_at").isoformat() if task_info.get("started_at") else None,
-            "completed_at": task_info.get("completed_at").isoformat() if task_info.get("completed_at") else None,
+            "started_at": started_at.isoformat() if started_at else None,
+            "completed_at": completed_at.isoformat() if completed_at else None,
             "error_message": task_info.get("error_message"),
             "processing_mode": task_info.get("processing_mode"),
+            "execution_time": execution_time,
             "priority": task_info.get("priority"),
             "retry_count": task_info.get("retry_count"),
             "worker_id": task_info.get("worker_id"),
@@ -273,7 +280,6 @@ async def get_task_status(task_id: str):
                 result_data.get("layout"),
                 task_id=task_id,
             )
-            response_data["execution_time"] = result_data.get("execution_time")
 
         return ApiResponse(
             success=True,

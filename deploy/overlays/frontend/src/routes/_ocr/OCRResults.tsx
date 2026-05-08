@@ -161,6 +161,18 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 		result?.response?.metadata?.processing_mode
 	])
 
+	// When the user clicks a formula block in the preview pane, switch the
+	// active tab to "formulas" so the matching card is visible.
+	const clickedPdfBlockId = useOcrStore(s => s.clickedPdfBlockId)
+	useEffect(() => {
+		if (clickedPdfBlockId === null) return
+		const block = blocks.find(b => b.id === clickedPdfBlockId)
+		if (!block) return
+		if (block.formulaId || block.layoutType?.includes('formula') || block.latex) {
+			setActiveTab('formulas')
+		}
+	}, [clickedPdfBlockId, blocks])
+
 	const handleCopy = async () => {
 		if (!result?.response?.full_markdown) return
 		try {

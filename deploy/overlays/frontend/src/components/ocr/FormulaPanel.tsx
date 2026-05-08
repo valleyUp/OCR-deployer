@@ -235,6 +235,11 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 		})
 	}, [query, formulas])
 
+	const scrollSelectedIntoView = (key: string | null) => {
+		if (!key) return
+		cardRefs.current.get(key)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+	}
+
 	useEffect(() => {
 		if (!filtered.length) {
 			setSelectedKey(null)
@@ -247,6 +252,27 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 			setSelectedKey(keyFor(filtered[0], 0))
 		}
 	}, [filtered, selectedKey])
+
+	// When the user clicks a formula block in the preview, scroll to and
+	// select the matching formula card (reverse of the current card→preview
+	// direction). We only read store state here — no store writes — so this
+	// cannot create a feedback loop.
+	const clickedPdfBlockId = useOcrStore(s => s.clickedPdfBlockId)
+	useEffect(() => {
+		if (clickedPdfBlockId === null) return
+		const block = blocks.find(b => b.id === clickedPdfBlockId)
+		if (!block) return
+		const matched = formulas.find(f => {
+			if (f.formula_id && f.formula_id === block.formulaId) return true
+			const numeric = Number(f.block_id)
+			if (!Number.isNaN(numeric) && numeric === clickedPdfBlockId) return true
+			return false
+		})
+		if (!matched) return
+		const key = matched.formula_id || `${matched.page_index}-${formulas.indexOf(matched)}`
+		setSelectedKey(key)
+		requestAnimationFrame(() => scrollSelectedIntoView(key))
+	}, [clickedPdfBlockId, formulas, blocks])
 
 	const activateFormula = useCallback(
 		(formula: FormulaItem, click = false) => {
@@ -290,12 +316,6 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 		},
 		[]
 	)
-
-	const scrollSelectedIntoView = (key: string | null) => {
-		if (!key) return
-		const node = cardRefs.current.get(key)
-		node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-	}
 
 	const handleKeyDown: React.KeyboardEventHandler<HTMLDivElement> = event => {
 		if (!filtered.length) return

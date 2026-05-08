@@ -12,6 +12,7 @@ from app.services.formula_service import (
     extract_formulas_from_layout,
     looks_like_formula,
     normalize_latex,
+    should_keep_formula_mode_block,
 )
 from app.utils.logger import logger
 
@@ -101,7 +102,12 @@ async def _merge_to_markdown(
 
     markdown_lines = []
     result = {}
-    result["metadata"] = context.metadata or {}
+    result["metadata"] = {
+        **(context.metadata or {}),
+        "task_id": context.task_id,
+        "document_id": context.document_id,
+        "processing_mode": context.processing_mode,
+    }
     merge_res_layout = []
     total_pages = len(pages)
     for page in pages:
@@ -109,6 +115,11 @@ async def _merge_to_markdown(
         for block in layout:
             text = block.get("content", "")
             layout_type = block.get("layout_type", "")
+            if context.processing_mode == "formula" and not should_keep_formula_mode_block(
+                layout_type,
+                text,
+            ):
+                continue
             if layout_type == "image":
                 img_name = block.get("image_path")
                 # 将相对路径转换为绝对路径

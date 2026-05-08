@@ -16,6 +16,11 @@ interface OCRResultsProps {
 	fileName?: string
 }
 
+const isFormulaLayout = (layoutType?: string) => {
+	const label = String(layoutType || '').toLowerCase()
+	return label.includes('formula') || label.includes('equation')
+}
+
 export function OCRResults({ result, fileName }: OCRResultsProps) {
 	const setBlocks = useOcrStore(s => s.setBlocks)
 
@@ -39,7 +44,7 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 		}
 
 		return layout
-			.filter((b: any) => b.formula?.latex || b.layout_type === 'formula')
+			.filter((b: any) => b.formula?.latex || isFormulaLayout(b.layout_type))
 			.map((b: any, index: number) => ({
 				formula_id: b.formula_id || `formula-p${b.page_index ?? 1}-b${b.block_id ?? index + 1}`,
 				task_id: result?.response?.task_id,
@@ -110,21 +115,31 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 			autoSwitchTaskRef.current = taskId ?? null
 			autoSwitchedRef.current = false
 		}
-		const processingMode = result?.response?.metadata?.processing_mode
+		const processingMode =
+			result?.response?.processing_mode || result?.response?.metadata?.processing_mode
 		if (
 			!autoSwitchedRef.current &&
 			result?.status === 'completed' &&
-			processingMode === 'formula' &&
-			formulas.length > 0
+			processingMode === 'formula'
 		) {
 			setActiveTab('formulas')
 			autoSwitchedRef.current = true
+		} else if (
+			!autoSwitchedRef.current &&
+			result?.status === 'completed' &&
+			processingMode &&
+			processingMode !== 'formula' &&
+			activeTab === 'formulas'
+		) {
+			setActiveTab('markdown')
+			autoSwitchedRef.current = true
 		}
 	}, [
+		activeTab,
 		result?.status,
 		result?.response?.task_id,
+		result?.response?.processing_mode,
 		result?.response?.metadata?.processing_mode,
-		formulas.length
 	])
 
 	const handleCopy = () => {

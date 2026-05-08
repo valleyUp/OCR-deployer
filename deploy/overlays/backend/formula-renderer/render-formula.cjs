@@ -43,6 +43,12 @@ function renderUnicodeMath(latex) {
   return mmlToUnicodeMath(compileToMml(latex));
 }
 
+function renderSvg(latex) {
+  const { adaptor, html } = createDocument();
+  const node = html.convert(latex, { display: true });
+  return adaptor.innerHTML(node) || adaptor.outerHTML(node);
+}
+
 const FENCE_PAIRS = new Set(['()', '[]', '{}', '⟨⟩', '||', '‖‖']);
 
 function isTokenLike(node) {
@@ -180,9 +186,7 @@ try {
     }
     process.stdout.write(result);
   } else {
-    const { adaptor, html } = createDocument();
-    const node = html.convert(latex, { display: true });
-    process.stdout.write(adaptor.outerHTML(node));
+    process.stdout.write(renderSvg(latex));
   }
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

@@ -27,14 +27,16 @@ describe('FileUpload', () => {
 			document_id: 'doc-1',
 			status: 'pending',
 			created_at: '2026-05-07T00:00:00Z',
-			priority: 2
+			priority: 2,
+			processing_mode: 'formula'
 		})
 		mockedGetTaskStatus.mockResolvedValue({
 			task_id: 'task-1',
 			document_id: 'doc-1',
 			status: 'completed',
 			created_at: '2026-05-07T00:00:00Z',
-			priority: 2
+			priority: 2,
+			processing_mode: 'formula'
 		})
 		vi.spyOn(globalThis, 'setInterval').mockReturnValue(1 as unknown as ReturnType<typeof setInterval>)
 		vi.spyOn(globalThis, 'clearInterval').mockImplementation(() => {})
@@ -57,6 +59,37 @@ describe('FileUpload', () => {
 			expect(mockedUploadTask).toHaveBeenCalledWith(
 				expect.objectContaining({
 					file,
+					processing_mode: 'formula'
+				})
+			)
+		})
+	})
+
+	it('submits pasted images with the selected formula processing mode', async () => {
+		render(<FileUpload onFileUploaded={vi.fn()} />)
+
+		fireEvent.click(screen.getByRole('button', { name: /公式识别/ }))
+		const file = new File(['image'], '', { type: 'image/png' })
+		const pasteEvent = new Event('paste', {
+			bubbles: true,
+			cancelable: true
+		}) as ClipboardEvent
+		Object.defineProperty(pasteEvent, 'clipboardData', {
+			value: {
+				items: [
+					{
+						kind: 'file',
+						type: 'image/png',
+						getAsFile: () => file
+					}
+				]
+			}
+		})
+		window.dispatchEvent(pasteEvent)
+
+		await waitFor(() => {
+			expect(mockedUploadTask).toHaveBeenCalledWith(
+				expect.objectContaining({
 					processing_mode: 'formula'
 				})
 			)

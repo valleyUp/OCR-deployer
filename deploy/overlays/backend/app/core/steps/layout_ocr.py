@@ -13,7 +13,7 @@ from app.core.flows.base import ProcessingContext
 from app.utils.config import settings
 from app.utils.image_processer import crop_image_by_bbox_to_path, vlm_bbox_convert
 from app.utils.logger import logger
-from app.services.formula_service import looks_like_formula, normalize_latex
+from app.services.formula_service import looks_like_formula, normalize_latex, should_keep_formula_mode_block
 from PIL import Image
 
 
@@ -159,9 +159,12 @@ async def _call_ocr_service(
             else:
                 block_bbox = [0, 0, 0, 0]
             block_content = block.get("content", None)
-            is_formula = looks_like_formula(block_label, block_content)
-            if processing_mode == "formula" and not is_formula:
-                continue
+            if processing_mode == "formula":
+                if not should_keep_formula_mode_block(block_label, block_content):
+                    continue
+                is_formula = True
+            else:
+                is_formula = looks_like_formula(block_label, block_content)
 
             block_index = block_idx
             normalized_box = vlm_bbox_convert(

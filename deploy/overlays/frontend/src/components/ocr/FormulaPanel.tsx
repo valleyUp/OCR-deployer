@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/libs/utils'
 import {
 	exportTaskFormulas,
+	renderFormula,
 	renderFormulaText,
 	type FormulaFormat,
 	type FormulaItem
@@ -20,6 +21,7 @@ interface FormulaPanelProps {
 }
 
 type CopyFormat = 'latex' | 'mathml' | 'unicodemath'
+type DownloadFormat = 'latex' | 'mathml' | 'png'
 
 interface ExportPreset {
 	key: string
@@ -38,6 +40,24 @@ const COPY_SUCCESS: Record<CopyFormat, string> = {
 	latex: 'LaTeX 已复制',
 	mathml: 'MathML 已复制',
 	unicodemath: 'UnicodeMath 已复制'
+}
+
+const DOWNLOAD_LABELS: Record<DownloadFormat, string> = {
+	latex: '下载 TEX',
+	mathml: '下载 MML',
+	png: '下载 PNG'
+}
+
+const DOWNLOAD_EXTENSIONS: Record<DownloadFormat, string> = {
+	latex: 'tex',
+	mathml: 'mml',
+	png: 'png'
+}
+
+const DOWNLOAD_MEDIA_TYPES: Record<DownloadFormat, string> = {
+	latex: 'application/x-tex;charset=utf-8',
+	mathml: 'application/mathml+xml;charset=utf-8',
+	png: 'image/png'
 }
 
 const EXPORT_PRESETS: ExportPreset[] = [
@@ -190,6 +210,7 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 	const setClickedBlockId = useOcrStore(s => s.setClickedBlockId)
 	const copyCacheRef = useRef<Map<string, string>>(new Map())
 	const [copyBusy, setCopyBusy] = useState<string | null>(null)
+	const [downloadBusy, setDownloadBusy] = useState<string | null>(null)
 
 	const activateFormula = (formula: FormulaItem, click = false) => {
 		const numericBlockId = Number(formula.block_id)
@@ -223,6 +244,25 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 			toast.error(`复制失败：${message}`)
 		} finally {
 			setCopyBusy(null)
+		}
+	}
+
+	const downloadFormula = async (formula: FormulaItem, format: DownloadFormat) => {
+		const busyKey = `${formula.formula_id || ''}|${format}`
+		setDownloadBusy(busyKey)
+		try {
+			const blob =
+				format === 'latex'
+					? new Blob([formula.latex], { type: DOWNLOAD_MEDIA_TYPES[format] })
+					: await renderFormula(formula.latex, format)
+			const formulaId = formula.formula_id || 'formula'
+			saveBlob(blob, `${formulaId}.${DOWNLOAD_EXTENSIONS[format]}`)
+			toast.success(`${DOWNLOAD_LABELS[format]}已开始下载`)
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			toast.error(`下载失败：${message}`)
+		} finally {
+			setDownloadBusy(null)
 		}
 	}
 
@@ -278,6 +318,23 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 													void copyFormula(formula, format)
 												}}>
 												{isBusy ? '复制中…' : COPY_LABELS[format]}
+											</Button>
+										)
+									})}
+									{(Object.keys(DOWNLOAD_LABELS) as DownloadFormat[]).map(format => {
+										const busyKey = `${formula.formula_id || ''}|${format}`
+										const isBusy = downloadBusy === busyKey
+										return (
+											<Button
+												key={format}
+												variant='outline'
+												size='sm'
+												disabled={isBusy}
+												onClick={event => {
+													event.stopPropagation()
+													void downloadFormula(formula, format)
+												}}>
+												{isBusy ? '下载中…' : DOWNLOAD_LABELS[format]}
 											</Button>
 										)
 									})}

@@ -55,6 +55,7 @@ export interface UploadTaskData {
 	created_at: string
 	priority: string | number
 	status: string
+	processing_mode?: 'pipeline' | 'formula' | string
 	error?: string | null
 	message?: string | null
 }
@@ -74,6 +75,7 @@ export interface TaskStatusData {
 	task_id: string | number
 	document_id: string
 	status: TaskStatus
+	processing_mode?: 'pipeline' | 'formula' | string
 	progress?: number
 	current_stage?: string | null
 	created_at: string

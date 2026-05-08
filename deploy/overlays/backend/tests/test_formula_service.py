@@ -9,6 +9,7 @@ from app.services.formula_service import (
     normalize_latex,
     parse_formula_formats,
     render_formula_bytes,
+    should_keep_formula_mode_block,
 )
 import pytest
 
@@ -53,6 +54,16 @@ def test_extracts_inline_formula_candidates_from_text():
     assert [item["latex"] for item in formulas] == ["x_i = y_i + 1"]
 
 
+def test_formula_mode_filter_keeps_only_formula_layout_blocks():
+    assert should_keep_formula_mode_block("equation", r"\frac{a}{b}")
+    assert should_keep_formula_mode_block("formula", "$$E=mc^2$$")
+    assert not should_keep_formula_mode_block(
+        "text",
+        "where $x_i = y_i + 1$ is defined inline",
+    )
+    assert not should_keep_formula_mode_block("formula_number", "(1)")
+
+
 def test_render_and_zip_exports_are_format_stable():
     assert normalize_latex(r"\[ a + b \]") == "a + b"
     assert parse_formula_formats("tex,mml,um,png") == [
@@ -77,6 +88,19 @@ def test_render_and_zip_exports_are_format_stable():
         ]
         manifest = json.loads(zip_file.read("manifest.json"))
         assert manifest["count"] == 1
+        assert manifest["errors"] == []
+
+
+def test_zip_export_records_bad_formula_without_failing_archive():
+    formulas = [{"formula_id": "formula-1", "latex": r"\frac{a"}]
+    archive = build_formulas_zip(formulas, ["latex", "mathml"])
+
+    with zipfile.ZipFile(io.BytesIO(archive)) as zip_file:
+        names = sorted(zip_file.namelist())
+        assert "formula-1.mathml.error.txt" in names
+        assert "manifest.json" in names
+        manifest = json.loads(zip_file.read("manifest.json"))
+        assert manifest["errors"][0]["formula_id"] == "formula-1"
 
 
 def test_unicodemath_falls_back_when_renderer_is_missing(monkeypatch):

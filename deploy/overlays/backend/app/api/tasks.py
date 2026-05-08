@@ -259,7 +259,13 @@ async def get_task_status(task_id: str):
 
         # 添加结果数据
         if result_data:
-            response_data["metadata"]= result_data.get("metadata")
+            metadata = result_data.get("metadata") or {}
+            if task_info.get("processing_mode") and "processing_mode" not in metadata:
+                metadata = {
+                    **metadata,
+                    "processing_mode": task_info.get("processing_mode"),
+                }
+            response_data["metadata"]= metadata
             response_data["full_markdown"] = result_data.get("full_markdown")
             response_data["layout"] = result_data.get("layout")
             response_data["formulas"] = result_data.get("formulas") or extract_formulas_from_layout(

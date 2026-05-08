@@ -26,8 +26,19 @@ FORMULA_LAYOUT_TYPES = {
     "formula",
     "formula_number",
     "equation",
+    "equation_number",
     "isolated_formula",
     "inline_formula",
+}
+FORMULA_CONTENT_LAYOUT_TYPES = {
+    "formula",
+    "equation",
+    "isolated_formula",
+    "inline_formula",
+}
+FORMULA_NUMBER_LAYOUT_TYPES = {
+    "formula_number",
+    "equation_number",
 }
 FORMULA_FORMATS = {
     "latex",
@@ -128,14 +139,63 @@ def extract_latex_candidates(content: Any) -> List[str]:
     return candidates or [normalize_latex(text)]
 
 
+def _normalized_layout_type(layout_type: Any) -> str:
+    return str(layout_type or "").strip().lower().replace("-", "_")
+
+
+def is_explicit_formula_layout(layout_type: Any) -> bool:
+    label = _normalized_layout_type(layout_type)
+    if label in FORMULA_CONTENT_LAYOUT_TYPES:
+        return True
+    if "equation" in label:
+        return "number" not in label
+    if "formula" in label:
+        return "number" not in label
+    return False
+
+
+def is_formula_number_layout(layout_type: Any) -> bool:
+    label = _normalized_layout_type(layout_type)
+    return label in FORMULA_NUMBER_LAYOUT_TYPES or (
+        ("formula" in label or "equation" in label) and "number" in label
+    )
+
+
+def is_formula_only_content(content: Any) -> bool:
+    text = "" if content is None else str(content).strip()
+    if not text:
+        return False
+
+    normalized = normalize_latex(text)
+    if normalized != text:
+        return bool(normalized)
+    if MATH_PATTERN.fullmatch(text):
+        return True
+    return bool(re.fullmatch(r"\\[A-Za-z]+(?:\s|[{_^\[]|$)[\s\S]*", text))
+
+
+def should_keep_formula_mode_block(layout_type: Any, content: Any) -> bool:
+    if is_explicit_formula_layout(layout_type):
+        return bool(normalize_latex(content))
+    if is_formula_number_layout(layout_type):
+        return False
+    # Some OCR endpoints omit labels in formula-only mode. Accept only pure
+    # formula text, not prose containing an inline equation.
+    if not _normalized_layout_type(layout_type):
+        return is_formula_only_content(content)
+    return False
+
+
 def looks_like_formula(layout_type: Any, content: Any) -> bool:
-    label = str(layout_type or "").strip().lower()
-    if label in FORMULA_LAYOUT_TYPES or "formula" in label:
+    label = _normalized_layout_type(layout_type)
+    if is_explicit_formula_layout(label):
         return True
 
     text = "" if content is None else str(content)
     if not text.strip():
         return False
+    if is_formula_number_layout(label):
+        return is_formula_only_content(text)
     if MATH_PATTERN.search(text):
         return True
     return bool(re.search(r"\\(frac|sum|int|sqrt|begin|alpha|beta|gamma|mathrm|tag)\b", text))
@@ -343,6 +403,11 @@ def fallback_png(latex: str) -> bytes:
     return buffer.getvalue()
 
 
+def extract_svg_markup(markup: str) -> str:
+    match = re.search(r"(<svg[\s\S]*?</svg>)", markup.strip())
+    return match.group(1) if match else markup
+
+
 def svg_to_png(svg_markup: str) -> bytes:
     converter = shutil.which("rsvg-convert")
     if not converter:
@@ -351,14 +416,18 @@ def svg_to_png(svg_markup: str) -> bytes:
     with tempfile.TemporaryDirectory() as tmp_dir:
         svg_path = Path(tmp_dir) / "formula.svg"
         png_path = Path(tmp_dir) / "formula.png"
-        svg_path.write_text(svg_markup, encoding="utf-8")
-        subprocess.run(
-            [converter, "-f", "png", "-o", str(png_path), str(svg_path)],
-            capture_output=True,
-            text=True,
-            timeout=_render_timeout(),
-            check=True,
-        )
+        svg_path.write_text(extract_svg_markup(svg_markup), encoding="utf-8")
+        try:
+            subprocess.run(
+                [converter, "-f", "png", "-o", str(png_path), str(svg_path)],
+                capture_output=True,
+                text=True,
+                timeout=_render_timeout(),
+                check=True,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            detail = getattr(exc, "stderr", "") or str(exc)
+            raise FormulaRenderError(f"SVG to PNG conversion failed: {detail}") from exc
         return png_path.read_bytes()
 
 
@@ -397,19 +466,37 @@ def render_formula_bytes(latex: str, format: str) -> tuple[bytes, str, str]:
 def build_formulas_zip(formulas: List[Dict[str, Any]], formats: Sequence[str]) -> bytes:
     normalized_formats = parse_formula_formats(formats)
     buffer = io.BytesIO()
+    entries: List[tuple[str, bytes]] = []
+    errors: List[Dict[str, str]] = []
+
+    for formula in formulas:
+        formula_id = str(formula.get("formula_id") or "formula").replace("/", "-")
+        embedded = formula.get("formula") if isinstance(formula.get("formula"), dict) else {}
+        latex = str(formula.get("latex") or embedded.get("latex") or "")
+        for fmt in normalized_formats:
+            try:
+                content, _, extension = render_formula_bytes(latex, fmt)
+                entries.append((f"{formula_id}.{extension}", content))
+            except Exception as exc:  # keep one bad formula from breaking the archive
+                errors.append(
+                    {
+                        "formula_id": formula_id,
+                        "format": fmt,
+                        "error": str(exc),
+                    }
+                )
+                entries.append((f"{formula_id}.{fmt}.error.txt", str(exc).encode("utf-8")))
+
     manifest = {
         "count": len(formulas),
         "formats": normalized_formats,
         "formulas": formulas,
+        "errors": errors,
     }
 
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
-        for formula in formulas:
-            formula_id = str(formula.get("formula_id") or "formula")
-            latex = str(formula.get("latex") or formula.get("formula", {}).get("latex") or "")
-            for fmt in normalized_formats:
-                content, _, extension = render_formula_bytes(latex, fmt)
-                archive.writestr(f"{formula_id}.{extension}", content)
+        for filename, content in entries:
+            archive.writestr(filename, content)
 
     return buffer.getvalue()

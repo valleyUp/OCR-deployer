@@ -1,9 +1,22 @@
 import { useState, useRef, useEffect } from 'react'
-import { FileText, Loader2, Sigma, Upload } from 'lucide-react'
+import {
+	Check,
+	ClipboardCopy,
+	Clock,
+	FileText,
+	Loader2,
+	Sigma,
+	UploadCloud
+} from 'lucide-react'
 import { cn } from '@/libs/utils'
-import { uploadTask, getTaskStatus, type TaskStatus, type TaskStatusData } from '@/libs/api'
+import { Badge } from '@/components/ui/badge'
+import {
+	uploadTask,
+	getTaskStatus,
+	type TaskStatus,
+	type TaskStatusData
+} from '@/libs/api'
 import { toast } from 'sonner'
-
 
 export type Layout = {
 	block_content: string
@@ -35,37 +48,47 @@ interface FileUploadProps {
 	onTaskStatusChange?: (params: TaskResponse) => void
 }
 
-// 允许的文件格式
 const ALLOWED_FILE_TYPES = [
 	'image/png',
 	'image/jpeg',
 	'image/jpg',
 	'application/pdf'
 ]
-
-// 允许的文件扩展名（用于备用验证）
 const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.pdf']
-// const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.pdf', '.doc', '.docx']
-
-// 文件大小限制：20MB
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB in bytes
 type ProcessingMode = 'pipeline' | 'formula'
 const CLIPBOARD_IMAGE_PREFIX = 'clipboard-image'
 
+const STAGE_STEPS: { id: string; label: string; matchers: string[] }[] = [
+	{ id: 'upload', label: '上传', matchers: ['upload', 'queued', 'pending'] },
+	{ id: 'layout', label: '版面分析', matchers: ['layout', 'detect', 'parse', 'page'] },
+	{ id: 'recognize', label: '识别中', matchers: ['recogniz', 'ocr', 'formula', 'text', 'generate'] },
+	{ id: 'finalize', label: '整理结果', matchers: ['merge', 'render', 'finaliz', 'serializ', 'export'] }
+]
+
+const MODE_OPTIONS: {
+	id: ProcessingMode
+	label: string
+	hint: string
+	icon: typeof FileText
+}[] = [
+	{ id: 'pipeline', label: '文档 OCR', hint: 'Markdown + bbox', icon: FileText },
+	{ id: 'formula', label: '公式识别', hint: 'LaTeX / MML / UM', icon: Sigma }
+]
+
 const inferMimeTypeByName = (name: string): string => {
-	const lowerName = name.toLowerCase()
-	if (lowerName.endsWith('.pdf')) return 'application/pdf'
-	if (lowerName.endsWith('.png')) return 'image/png'
-	if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'image/jpeg'
+	const lower = name.toLowerCase()
+	if (lower.endsWith('.pdf')) return 'application/pdf'
+	if (lower.endsWith('.png')) return 'image/png'
+	if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
 	return ''
 }
 
-const normalizeFileType = (file: File): string => {
-	return file.type || inferMimeTypeByName(file.name)
-}
+const normalizeFileType = (file: File): string =>
+	file.type || inferMimeTypeByName(file.name)
 
-const getFileExtensionByMimeType = (mimeType: string): string => {
-	switch (mimeType) {
+const getFileExtensionByMimeType = (mime: string): string => {
+	switch (mime) {
 		case 'image/jpeg':
 			return 'jpg'
 		case 'image/webp':
@@ -77,15 +100,14 @@ const getFileExtensionByMimeType = (mimeType: string): string => {
 
 const createClipboardImageFile = (file: File): File => {
 	if (file.name) return file
-
 	const normalizedType = normalizeFileType(file) || 'image/png'
 	const extension = getFileExtensionByMimeType(normalizedType)
 	const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-
-	return new File([file], `${CLIPBOARD_IMAGE_PREFIX}-${timestamp}.${extension}`, {
-		type: normalizedType,
-		lastModified: Date.now()
-	})
+	return new File(
+		[file],
+		`${CLIPBOARD_IMAGE_PREFIX}-${timestamp}.${extension}`,
+		{ type: normalizedType, lastModified: Date.now() }
+	)
 }
 
 const isEditablePasteTarget = (target: EventTarget | null): boolean => {
@@ -94,40 +116,46 @@ const isEditablePasteTarget = (target: EventTarget | null): boolean => {
 	return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
 
-
-// 验证文件类型
 const isValidFileType = (file: File): boolean => {
-	const normalizedType = normalizeFileType(file)
-	// 检查 MIME 类型
-	if (ALLOWED_FILE_TYPES.includes(normalizedType)) {
-		return true
-	}
-
-	// 备用检查：通过文件扩展名
+	const normalized = normalizeFileType(file)
+	if (ALLOWED_FILE_TYPES.includes(normalized)) return true
 	const fileName = file.name.toLowerCase()
 	return ALLOWED_EXTENSIONS.some(ext => fileName.endsWith(ext))
 }
 
-// 验证文件大小
-const isValidFileSize = (file: File): boolean => {
-	return file.size <= MAX_FILE_SIZE
-}
+const isValidFileSize = (file: File): boolean => file.size <= MAX_FILE_SIZE
 
-// 格式化文件大小
 const formatFileSize = (bytes: number): string => {
-	if (bytes < 1024) return bytes + ' B'
-	if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
-	return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+	if (bytes < 1024) return `${bytes} B`
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadProps) {
+const resolveStageIndex = (stage?: string | null): number => {
+	if (!stage) return 0
+	const lower = stage.toLowerCase()
+	for (let i = STAGE_STEPS.length - 1; i >= 0; i--) {
+		if (STAGE_STEPS[i].matchers.some(token => lower.includes(token))) {
+			return i
+		}
+	}
+	return 0
+}
+
+export function FileUpload({
+	onFileUploaded,
+	onTaskStatusChange
+}: FileUploadProps) {
 	const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null)
 	const [isDragging, setIsDragging] = useState(false)
 	const [processingMode, setProcessingMode] = useState<ProcessingMode>('pipeline')
+	const [isLoading, setIsLoading] = useState(false)
+	const [latestStatus, setLatestStatus] = useState<TaskStatusData | null>(null)
+	const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
+	const [taskIdCopied, setTaskIdCopied] = useState(false)
+
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const pollingIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
-	const [isLoading, setIsLoading] = useState(false)
-
 
 	const handleDragOver = (e: React.DragEvent) => {
 		if (isLoading) return
@@ -145,11 +173,8 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
 		if (isLoading) return
 		e.preventDefault()
 		setIsDragging(false)
-
 		const droppedFiles = Array.from(e.dataTransfer.files)
-		if (droppedFiles.length > 0) {
-			handleFile(droppedFiles[0])
-		}
+		if (droppedFiles.length > 0) handleFile(droppedFiles[0])
 	}
 
 	const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,39 +182,29 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
 		const selectedFiles = e.target.files
 		if (selectedFiles && selectedFiles.length > 0) {
 			handleFile(selectedFiles[0])
-			// 重置 input 的值，这样下次选择相同文件时也能触发 onChange
-			if (fileInputRef.current) {
-				fileInputRef.current.value = ''
-			}
+			if (fileInputRef.current) fileInputRef.current.value = ''
 		}
 	}
 
 	const handleFile = async (file: File) => {
-		// 验证文件类型
 		if (!isValidFileType(file)) {
 			toast.error(
-				`不支持的文件格式。支持的格式：${ALLOWED_EXTENSIONS.join(', ').toUpperCase()}`
+				`不支持的文件格式。支持：${ALLOWED_EXTENSIONS.join(', ').toUpperCase()}`
 			)
-			// 重置 input 的值
-			if (fileInputRef.current) {
-				fileInputRef.current.value = ''
-			}
+			if (fileInputRef.current) fileInputRef.current.value = ''
 			return
 		}
-
-		// 验证文件大小
 		if (!isValidFileSize(file)) {
 			toast.error(
-				`文件大小超过限制。当前文件：${formatFileSize(file.size)}，最大允许：${formatFileSize(MAX_FILE_SIZE)}`
+				`文件过大。${formatFileSize(file.size)} / ${formatFileSize(MAX_FILE_SIZE)}`
 			)
-			// 重置 input 的值
-			if (fileInputRef.current) {
-				fileInputRef.current.value = ''
-			}
+			if (fileInputRef.current) fileInputRef.current.value = ''
 			return
 		}
 
 		setIsLoading(true)
+		setLatestStatus(null)
+		setCurrentTaskId(null)
 		const uploadedFile: UploadedFile = {
 			id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
 			name: file.name,
@@ -202,28 +217,20 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
 		}
 		setSelectedFile(uploadedFile)
 
-
 		try {
 			const uploadParams: Parameters<typeof uploadTask>[0] = {
-				file: file,
+				file,
 				custom_url: undefined,
 				processing_mode: processingMode
 			}
-
 			const response = await uploadTask(uploadParams)
-
-			// 上传成功，更新文件状态并开始轮询
 			const taskId = String(response.task_id)
-
+			setCurrentTaskId(taskId)
 			onFileUploaded(uploadedFile)
-
-			// 开始轮询任务状态
-			if (taskId) {
-				startPolling(uploadedFile.id, taskId)
-			}
+			if (taskId) startPolling(uploadedFile.id, taskId)
 		} catch (error: any) {
-			// 上传失败
-			const errorMessage = error.response?.data?.message || error.message || '文件上传失败'
+			const errorMessage =
+				error.response?.data?.message || error.message || '文件上传失败'
 			toast.error(errorMessage)
 			setSelectedFile(null)
 			setIsLoading(false)
@@ -232,38 +239,27 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
 
 	const handlePaste = (e: ClipboardEvent) => {
 		if (isLoading || e.defaultPrevented || isEditablePasteTarget(e.target)) return
-
 		const clipboardItems = Array.from(e.clipboardData?.items ?? [])
 		const imageItem = clipboardItems.find(
 			item => item.kind === 'file' && item.type.startsWith('image/')
 		)
-
 		if (!imageItem) return
-
 		const pastedFile = imageItem.getAsFile()
 		if (!pastedFile) return
-
 		e.preventDefault()
 		void handleFile(createClipboardImageFile(pastedFile))
 	}
 
-	// 开始轮询任务状态
 	const startPolling = (fileId: string, taskId: string | number) => {
-		// 如果已经有轮询在进行，先清除
 		stopPolling(fileId)
-
-		// 立即查询一次
 		pollTaskStatus(fileId, taskId)
-
-		// 设置定时轮询，每 2 秒查询一次
-		const interval = setInterval(() => {
-			pollTaskStatus(fileId, taskId)
-		}, 2000)
-
+		const interval = setInterval(
+			() => pollTaskStatus(fileId, taskId),
+			2000
+		)
 		pollingIntervalsRef.current.set(fileId, interval)
 	}
 
-	// 停止轮询
 	const stopPolling = (fileId: string) => {
 		const interval = pollingIntervalsRef.current.get(fileId)
 		if (interval) {
@@ -272,34 +268,23 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
 		}
 	}
 
-	// 查询任务状态
 	const pollTaskStatus = async (fileId: string, taskId: string | number) => {
 		try {
 			const response = await getTaskStatus(taskId)
 			const { status, error_message } = response
-
-			// 更新任务状态（error_message 对应 error），并保存完整的响应
-			onTaskStatusChange?.({
-				fileId,
-				status,
-				response,
-				error_message
-			})
-
-			// 如果任务完成或失败，停止轮询
+			setLatestStatus(response)
+			onTaskStatusChange?.({ fileId, status, response, error_message })
 			if (status === 'completed' || status === 'failed') {
 				stopPolling(fileId)
 				setIsLoading(false)
 			}
 		} catch (error: any) {
 			console.error('查询任务状态失败:', error)
-			// 查询失败时也停止轮询，避免无限重试
 			stopPolling(fileId)
 			setIsLoading(false)
 		}
 	}
 
-	// 组件卸载时清理所有轮询
 	useEffect(() => {
 		return () => {
 			pollingIntervalsRef.current.forEach(interval => clearInterval(interval))
@@ -309,75 +294,122 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
 
 	useEffect(() => {
 		window.addEventListener('paste', handlePaste)
-		return () => {
-			window.removeEventListener('paste', handlePaste)
-		}
+		return () => window.removeEventListener('paste', handlePaste)
 	}, [isLoading, processingMode])
 
+	const copyTaskId = async () => {
+		if (!currentTaskId) return
+		try {
+			await navigator.clipboard.writeText(currentTaskId)
+			setTaskIdCopied(true)
+			toast.success('已复制 task ID')
+			window.setTimeout(() => setTaskIdCopied(false), 1200)
+		} catch {
+			toast.error('复制失败')
+		}
+	}
+
+	const stageIndex = resolveStageIndex(latestStatus?.current_stage)
+	const showTimeline = isLoading || latestStatus?.status === 'processing'
+
 	return (
-		<div className='h-full flex flex-col bg-white dark:bg-gray-900 border-r border-border'>
-			{/* 文件上传区域 */}
-			<div className='p-4'>
-				<h2 className='text-lg font-semibold mb-4'>文件上传</h2>
-				<div className='mb-4 grid grid-cols-2 rounded-md border bg-gray-50 p-1 text-sm'>
-					<button
-						type='button'
-						disabled={isLoading}
-						onClick={() => setProcessingMode('pipeline')}
-						className={cn(
-							'h-8 rounded-sm flex items-center justify-center gap-1.5 transition-colors',
-							processingMode === 'pipeline'
-								? 'bg-white text-gray-950 shadow-sm'
-								: 'text-gray-600 hover:text-gray-950'
-						)}>
-						<FileText className='size-4' />
-						文档 OCR
-					</button>
-					<button
-						type='button'
-						disabled={isLoading}
-						onClick={() => setProcessingMode('formula')}
-						className={cn(
-							'h-8 rounded-sm flex items-center justify-center gap-1.5 transition-colors',
-							processingMode === 'formula'
-								? 'bg-white text-gray-950 shadow-sm'
-								: 'text-gray-600 hover:text-gray-950'
-						)}>
-						<Sigma className='size-4' />
-						公式识别
-					</button>
+		<div className='flex h-full flex-col bg-white'>
+			<div className='flex flex-col gap-4 p-4'>
+				<div>
+					<h2 className='text-[15px] font-semibold tracking-tight text-foreground'>
+						文件上传
+					</h2>
+					<p className='mt-0.5 text-[11px] text-muted-foreground'>
+						拖拽、点击选择或粘贴图片
+					</p>
 				</div>
+
+				<div className='rounded-lg bg-zinc-100 p-1'>
+					<div className='grid grid-cols-2 gap-1 text-sm'>
+						{MODE_OPTIONS.map(option => {
+							const active = processingMode === option.id
+							const Icon = option.icon
+							return (
+								<button
+									key={option.id}
+									type='button'
+									disabled={isLoading}
+									aria-pressed={active}
+									onClick={() => setProcessingMode(option.id)}
+									className={cn(
+										'flex flex-col items-center gap-0.5 rounded-md px-2 py-1.5 transition-[background-color,color,box-shadow] duration-200',
+										active
+											? 'bg-white text-foreground shadow-sm ring-1 ring-border'
+											: 'text-muted-foreground hover:text-foreground',
+										isLoading && 'cursor-not-allowed opacity-60'
+									)}>
+									<span className='flex items-center gap-1.5 text-[13px] font-medium'>
+										<Icon className='size-4' />
+										{option.label}
+									</span>
+									<span className='text-[10px] text-muted-foreground/80'>
+										{option.hint}
+									</span>
+								</button>
+							)
+						})}
+					</div>
+				</div>
+
 				<div
 					className={cn(
-						'border-2 border-dashed rounded-lg py-8 px-4 text-center cursor-pointer transition-colors',
+						'relative rounded-xl border-2 border-dashed px-4 py-8 text-center transition-[background-color,border-color,transform] duration-200',
+						isLoading && 'cursor-wait opacity-80',
+						!isLoading && 'cursor-pointer',
 						isDragging
-							? 'border-primary bg-primary/5'
-							: 'border-gray-300 dark:border-gray-700 hover:border-primary/50'
+							? 'scale-[1.01] border-primary bg-primary/5'
+							: 'border-zinc-300 hover:border-primary/50 hover:bg-zinc-50'
 					)}
 					onDragOver={handleDragOver}
 					onDragLeave={handleDragLeave}
 					onDrop={handleDrop}
-					onClick={() => fileInputRef.current?.click()}>
+					onClick={() => {
+						if (!isLoading) fileInputRef.current?.click()
+					}}>
 					{selectedFile?.file && isLoading ? (
-						<>
-							<div className='flex items-start justify-center gap-2'>
-								<Loader2 className='animate-spin' />
-								<p className='text-sm font-medium line-clamp-2 break-all leading-6'>
-									{selectedFile.name}
-								</p>
-							</div>
-						</>
-					) : (
-						<>
-							<Upload className='size-12 mx-auto mb-4 text-gray-400' />
-							<p className='text-sm font-medium mb-1'>点击或拖拽文件到此处</p>
-							<p className='text-xs text-gray-500'>或按 Ctrl+V / Cmd+V 直接粘贴图片</p>
-							<p className='text-xs text-gray-500'>
-								格式：png/jpg/jpeg, pdf
-								{/* 格式：png/jpg/jpeg, pdf, doc, docx */}
+						<div className='flex flex-col items-center gap-2'>
+							<Loader2 className='size-7 animate-spin text-primary' />
+							<p className='line-clamp-2 break-all text-sm font-medium leading-5'>
+								{selectedFile.name}
 							</p>
-							<p className='text-xs text-gray-400 mt-1'>最大 20MB</p>
-						</>
+							<p className='text-[11px] text-muted-foreground'>
+								{formatFileSize(selectedFile.size)}
+							</p>
+						</div>
+					) : (
+						<div className='flex flex-col items-center gap-2'>
+							<span
+								className={cn(
+									'flex size-12 items-center justify-center rounded-full transition-colors duration-200',
+									isDragging
+										? 'bg-primary/10 text-primary'
+										: 'bg-zinc-100 text-zinc-500'
+								)}>
+								<UploadCloud
+									className={cn(
+										'size-6',
+										isDragging && 'motion-safe:animate-bounce'
+									)}
+								/>
+							</span>
+							<p className='text-sm font-medium text-foreground'>
+								{isDragging ? '松手上传文件' : '点击或拖拽到此处'}
+							</p>
+							<p className='flex items-center justify-center gap-1 text-[11px] text-muted-foreground'>
+								或按 <kbd>⌘</kbd>
+								<span className='text-muted-foreground/70'>/</span>
+								<kbd>Ctrl</kbd>
+								<kbd>V</kbd> 粘贴图片
+							</p>
+							<p className='text-[11px] text-muted-foreground/80'>
+								PNG · JPG · JPEG · PDF · 最大 20 MB
+							</p>
+						</div>
 					)}
 				</div>
 
@@ -385,11 +417,95 @@ export function FileUpload({ onFileUploaded, onTaskStatusChange }: FileUploadPro
 					ref={fileInputRef}
 					type='file'
 					className='hidden'
-					accept='image/*,.pdf,.doc,.docx'
+					accept='image/*,.pdf'
 					disabled={isLoading}
 					onChange={handleFileInput}
 				/>
 			</div>
+
+			{showTimeline && (
+				<div className='mx-4 mb-4 rounded-lg border border-border bg-zinc-50/80 p-3'>
+					<div className='mb-3 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
+						<Clock className='size-3.5' />
+						{latestStatus?.current_stage || '排队中'}
+					</div>
+					<ol className='space-y-2'>
+						{STAGE_STEPS.map((step, index) => {
+							const state =
+								index < stageIndex
+									? 'done'
+									: index === stageIndex
+										? 'active'
+										: 'idle'
+							return (
+								<li key={step.id} className='flex items-center gap-2'>
+									<span
+										className={cn(
+											'flex size-4 items-center justify-center rounded-full transition-colors duration-200',
+											state === 'done' && 'bg-primary text-primary-foreground',
+											state === 'active' && 'bg-primary text-primary-foreground motion-safe:animate-pulse',
+											state === 'idle' && 'bg-zinc-200 text-muted-foreground'
+										)}>
+										{state === 'done' ? (
+											<Check className='size-2.5' />
+										) : (
+											<span className='size-1.5 rounded-full bg-current' />
+										)}
+									</span>
+									<span
+										className={cn(
+											'text-[12px]',
+											state === 'idle'
+												? 'text-muted-foreground'
+												: 'text-foreground'
+										)}>
+										{step.label}
+									</span>
+								</li>
+							)
+						})}
+					</ol>
+				</div>
+			)}
+
+			{selectedFile && !isLoading && (
+				<div className='mx-4 mb-4 space-y-2 rounded-lg border border-border bg-white p-3 text-[12px]'>
+					<div className='flex items-start gap-2'>
+						<FileText className='mt-0.5 size-3.5 shrink-0 text-muted-foreground' />
+						<p className='line-clamp-2 break-all font-medium text-foreground'>
+							{selectedFile.name}
+						</p>
+					</div>
+					<div className='flex flex-wrap items-center gap-1.5 text-muted-foreground'>
+						<Badge
+							variant='outline'
+							className='h-5 rounded-full px-2 text-[10px] font-normal'>
+							{formatFileSize(selectedFile.size)}
+						</Badge>
+						<Badge
+							variant='outline'
+							className='h-5 rounded-full px-2 text-[10px] font-normal'>
+							{selectedFile.processingMode === 'formula' ? '公式' : '文档'}
+						</Badge>
+						{currentTaskId && (
+							<button
+								type='button'
+								onClick={copyTaskId}
+								aria-label='复制任务 ID'
+								className={cn(
+									'ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-zinc-100 hover:text-foreground'
+								)}>
+								{taskIdCopied ? (
+									<Check className='size-3' />
+								) : (
+									<ClipboardCopy className='size-3' />
+								)}
+								<span className='max-w-[5.5rem] truncate'>{currentTaskId}</span>
+							</button>
+						)}
+					</div>
+				</div>
+			)}
 		</div>
 	)
 }

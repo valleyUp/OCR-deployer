@@ -247,6 +247,7 @@ async def get_task_status(task_id: str):
             "status": task_info.get("status"),
             "progress": task_info.get("progress"),
             "current_step": task_info.get("current_step"),
+            "current_stage": task_info.get("current_step"),
             "created_at": task_info.get("created_at").isoformat() if task_info.get("created_at") else None,
             "started_at": task_info.get("started_at").isoformat() if task_info.get("started_at") else None,
             "completed_at": task_info.get("completed_at").isoformat() if task_info.get("completed_at") else None,

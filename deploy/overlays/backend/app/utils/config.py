@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     environment: Literal["development", "testing", "production"] = "development"
 
+    # 单任务内版面+OCR 的分页并行度（1 = 顺序，现状；>1 通过 asyncio.Semaphore 限流）
+    LAYOUT_PAGE_PARALLELISM: int = 1
+
+    # 前端单文件上传上限（MB），通过 GET /api/v1/config 暴露给 UI
+    MAX_UPLOAD_MB: int = 100
+
     class Config:
         env_file = ".env"
         case_sensitive = True

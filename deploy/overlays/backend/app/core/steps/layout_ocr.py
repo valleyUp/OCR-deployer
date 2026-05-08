@@ -2,6 +2,7 @@
 版面分析和OCR处理步骤
 """
 
+import asyncio
 import json
 from typing import Dict, Any, Optional, Callable, List, Union
 from pathlib import Path
@@ -122,30 +123,73 @@ async def _call_ocr_service(
     page_height = page_size.get("height") if isinstance(page_size, dict) else None
     block_idx = 1
     ref_image_paths = []
-    for i, image_file in enumerate(image_files):
-        page_num = i + 1
-        current_page_width = page_width
-        current_page_height = page_height
-        if not current_page_width or not current_page_height:
+
+    prompt = config.get("prompt")
+    parallelism = max(1, int(getattr(settings, "LAYOUT_PAGE_PARALLELISM", 1)))
+    semaphore = asyncio.Semaphore(parallelism) if parallelism > 1 else None
+    done_counter = {"done": 0}
+
+    async def _recognise_page(index: int, image_file: str) -> Dict[str, Any]:
+        page_num = index + 1
+        current_w = page_width
+        current_h = page_height
+        if not current_w or not current_h:
             try:
                 with Image.open(image_file) as image:
-                    current_page_width, current_page_height = image.size
+                    current_w, current_h = image.size
             except Exception as e:
                 logger.warning(f"Failed to read image size from {image_file}: {e}")
-                current_page_width, current_page_height = 1000, 1000
+                current_w, current_h = 1000, 1000
 
-        prompt = config.get("prompt")
-        result = await cli.process_single_image(
-            image_file,
-            prompt=prompt,
-            custom_url=custom_url,
-            processing_mode=processing_mode,
-        )
-        if progress_callback:
-            progress = (i / total_pages) * 100
-            await progress_callback(
-                progress, f"Processing page {page_num}/{total_pages}"
+        async def _call() -> List[Dict[str, Any]]:
+            return await cli.process_single_image(
+                image_file,
+                prompt=prompt,
+                custom_url=custom_url,
+                processing_mode=processing_mode,
             )
+
+        if semaphore is not None:
+            async with semaphore:
+                result = await _call()
+        else:
+            result = await _call()
+
+        if progress_callback:
+            done_counter["done"] += 1
+            done = done_counter["done"]
+            progress = (done / total_pages) * 100
+            try:
+                await progress_callback(
+                    progress, f"Processing page {done}/{total_pages}"
+                )
+            except Exception:
+                pass
+
+        return {
+            "page_num": page_num,
+            "image_file": image_file,
+            "page_width": current_w,
+            "page_height": current_h,
+            "blocks": result,
+        }
+
+    if parallelism > 1 and len(image_files) > 1:
+        page_outputs = await asyncio.gather(
+            *[_recognise_page(i, f) for i, f in enumerate(image_files)]
+        )
+        page_outputs.sort(key=lambda p: p["page_num"])
+    else:
+        page_outputs = []
+        for i, image_file in enumerate(image_files):
+            page_outputs.append(await _recognise_page(i, image_file))
+
+    for page in page_outputs:
+        page_num = page["page_num"]
+        image_file = page["image_file"]
+        current_page_width = page["page_width"]
+        current_page_height = page["page_height"]
+        result = page["blocks"]
         page_blocks = []
         for idx, block in enumerate(result):
             if not isinstance(block, dict):
@@ -177,7 +221,6 @@ async def _call_ocr_service(
             image_path_field = None
             if block_label == "image":
                 try:
-                    # 生成分割文件名
                     split_filename = f"split_{page_num}_{block_idx:04d}.png"
                     split_path = os.path.join(output_dir, split_filename)
                     crop_image_by_bbox_to_path(image_file, normalized_box, split_path)
@@ -187,13 +230,12 @@ async def _call_ocr_service(
                 except Exception as e:
                     logger.warning(f"裁剪图片块 {block_idx} 失败: {str(e)}")
 
-            # 构建块信息，添加 image_path 字段
             block_info = {
                 "layout_type": block_label,
                 "layout_box": normalized_box,
                 "content": block_content,
                 "index": block_index,
-                "image_path": image_path_field,  # 图片类型时包含裁剪后的路径
+                "image_path": image_path_field,
                 "page_index": page_num,
             }
             if is_formula:
@@ -201,7 +243,7 @@ async def _call_ocr_service(
                 block_info["formula"] = {"latex": normalize_latex(block_content)}
             page_blocks.append(block_info)
             block_idx += 1
-        # 示例：每页的OCR结果
+
         pages_result.append(
             {
                 "page_index": page_num,

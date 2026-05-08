@@ -31,9 +31,9 @@ BACKEND_CONTAINER_NAME="${BACKEND_CONTAINER_NAME:-glm-ocr-backend}"
 
 LAYOUT_OCR_URL_EXPECTED="${LAYOUT_OCR_URL:-http://pipeline:5002/glmocr/parse}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-glm-ocr}"
-VLLM_DEVICE_EXPECTED="${VLLM_DEVICE:-cuda}"
 VLLM_GPU_DEVICES_EXPECTED="${VLLM_GPU_DEVICES-0}"
 VLLM_TENSOR_PARALLEL_SIZE_EXPECTED="${VLLM_TENSOR_PARALLEL_SIZE:-1}"
+VLLM_NUM_SPECULATIVE_TOKENS_EXPECTED="${VLLM_NUM_SPECULATIVE_TOKENS:-3}"
 LAYOUT_DEVICE_EXPECTED="${LAYOUT_DEVICE:-cuda:0}"
 LAYOUT_GPU_DEVICES_EXPECTED="${LAYOUT_GPU_DEVICES-0}"
 
@@ -101,15 +101,15 @@ else
 fi
 
 vllm_cmdline="$(docker exec "${VLLM_CONTAINER_NAME}" /bin/sh -lc "tr '\\0' ' ' < /proc/1/cmdline" 2>/dev/null || true)"
-if [[ "${vllm_cmdline}" == *"--device ${VLLM_DEVICE_EXPECTED}"* ]]; then
-    pass "vllm command contains --device ${VLLM_DEVICE_EXPECTED}"
-else
-    fail "vllm command missing --device ${VLLM_DEVICE_EXPECTED}"
-fi
 if [[ "${vllm_cmdline}" == *"--tensor-parallel-size ${VLLM_TENSOR_PARALLEL_SIZE_EXPECTED}"* ]]; then
     pass "vllm command contains --tensor-parallel-size ${VLLM_TENSOR_PARALLEL_SIZE_EXPECTED}"
 else
     fail "vllm command missing --tensor-parallel-size ${VLLM_TENSOR_PARALLEL_SIZE_EXPECTED}"
+fi
+if [[ "${vllm_cmdline}" == *"num_speculative_tokens\":${VLLM_NUM_SPECULATIVE_TOKENS_EXPECTED}"* ]]; then
+    pass "vllm command contains num_speculative_tokens=${VLLM_NUM_SPECULATIVE_TOKENS_EXPECTED}"
+else
+    fail "vllm command missing num_speculative_tokens=${VLLM_NUM_SPECULATIVE_TOKENS_EXPECTED}"
 fi
 
 layout_device_in_pipeline="$(docker exec "${PIPELINE_CONTAINER_NAME}" /bin/sh -lc 'echo ${GLMOCR_LAYOUT_DEVICE:-}' 2>/dev/null || true)"

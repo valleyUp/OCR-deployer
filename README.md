@@ -110,34 +110,31 @@ TRANSFORMERS_OFFLINE=1
 
 ### vLLM / GLM-OCR 推理设备
 
-GLM-OCR 大模型由 `vllm` 服务运行，当前 compose 暴露这些参数：
+GLM-OCR 大模型由 `vllm` 服务运行，当前部署只支持 GPU 推理，不提供 CPU
+启动配置。`deploy/docker-compose.yml` 使用 `vllm serve` 的位置参数传入模型名，
+避免使用即将废弃的 `--model` 选项。
+
+当前 compose 暴露这些参数：
 
 ```bash
 MODEL_NAME=zai-org/GLM-OCR
 SERVED_MODEL_NAME=glm-ocr
-VLLM_DEVICE=cuda
 VLLM_GPU_DEVICES=0
 VLLM_TENSOR_PARALLEL_SIZE=1
 VLLM_GPU_MEMORY_UTILIZATION=0.9
+VLLM_NUM_SPECULATIVE_TOKENS=3
 ```
 
 单 GPU CUDA 默认配置不需要修改。多 GPU 示例：
 
 ```bash
-VLLM_DEVICE=cuda
 VLLM_GPU_DEVICES=0,1
 VLLM_TENSOR_PARALLEL_SIZE=2
 ```
 
-CPU 示例：
-
-```bash
-VLLM_DEVICE=cpu
-VLLM_GPU_DEVICES=none
-```
-
-注意：默认 `deploy/vllm/Dockerfile` 基于 `vllm/vllm-openai:latest-ubuntu2404`，
-主要面向 CUDA；`VLLM_DEVICE=cpu` 还要求实际镜像支持 vLLM CPU 后端。
+`VLLM_GPU_DEVICES` 控制暴露给 vLLM 容器的物理 GPU；多卡时
+`VLLM_TENSOR_PARALLEL_SIZE` 应与 GPU 数量一致。`VLLM_NUM_SPECULATIVE_TOKENS`
+会写入 `--speculative-config`，默认值为 3。
 
 如需传入更多 vLLM 固定参数，可在 `deploy/docker-compose.yml` 的
 `vllm.command` 中追加，或用 compose override 文件维护本地差异。
@@ -158,7 +155,7 @@ LAYOUT_GPU_DEVICES=0
 - layout 走 CPU 时建议同时设置 `LAYOUT_GPU_DEVICES=none`。
 
 `scripts/diagnose-stack.sh` 会检查 `vllm` 的 `CUDA_VISIBLE_DEVICES`、
-`--device`、`--tensor-parallel-size`，以及 `pipeline` 的
+`--tensor-parallel-size`、`num_speculative_tokens`，以及 `pipeline` 的
 `GLMOCR_LAYOUT_DEVICE` 和 `CUDA_VISIBLE_DEVICES`。
 
 ### pipeline 服务

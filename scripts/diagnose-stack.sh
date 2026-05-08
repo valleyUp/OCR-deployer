@@ -31,7 +31,11 @@ BACKEND_CONTAINER_NAME="${BACKEND_CONTAINER_NAME:-glm-ocr-backend}"
 
 LAYOUT_OCR_URL_EXPECTED="${LAYOUT_OCR_URL:-http://pipeline:5002/glmocr/parse}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-glm-ocr}"
-PIPELINE_LAYOUT_GPU_DEVICE_EXPECTED="${PIPELINE_LAYOUT_GPU_DEVICE:-0}"
+VLLM_DEVICE_EXPECTED="${VLLM_DEVICE:-cuda}"
+VLLM_GPU_DEVICES_EXPECTED="${VLLM_GPU_DEVICES-0}"
+VLLM_TENSOR_PARALLEL_SIZE_EXPECTED="${VLLM_TENSOR_PARALLEL_SIZE:-1}"
+LAYOUT_DEVICE_EXPECTED="${LAYOUT_DEVICE:-cuda:0}"
+LAYOUT_GPU_DEVICES_EXPECTED="${LAYOUT_GPU_DEVICES-0}"
 
 if docker compose version &>/dev/null; then
     COMPOSE_CMD=(docker compose)
@@ -88,6 +92,41 @@ else
 fi
 echo
 
+echo "== Device Configuration Checks =="
+vllm_cuda_visible_devices="$(docker exec "${VLLM_CONTAINER_NAME}" /bin/sh -lc 'echo ${CUDA_VISIBLE_DEVICES:-}' 2>/dev/null || true)"
+if [[ "${vllm_cuda_visible_devices}" == "${VLLM_GPU_DEVICES_EXPECTED}" ]]; then
+    pass "vllm CUDA_VISIBLE_DEVICES=${vllm_cuda_visible_devices}"
+else
+    fail "vllm CUDA_VISIBLE_DEVICES='${vllm_cuda_visible_devices}' (expected '${VLLM_GPU_DEVICES_EXPECTED}')"
+fi
+
+vllm_cmdline="$(docker exec "${VLLM_CONTAINER_NAME}" /bin/sh -lc "tr '\\0' ' ' < /proc/1/cmdline" 2>/dev/null || true)"
+if [[ "${vllm_cmdline}" == *"--device ${VLLM_DEVICE_EXPECTED}"* ]]; then
+    pass "vllm command contains --device ${VLLM_DEVICE_EXPECTED}"
+else
+    fail "vllm command missing --device ${VLLM_DEVICE_EXPECTED}"
+fi
+if [[ "${vllm_cmdline}" == *"--tensor-parallel-size ${VLLM_TENSOR_PARALLEL_SIZE_EXPECTED}"* ]]; then
+    pass "vllm command contains --tensor-parallel-size ${VLLM_TENSOR_PARALLEL_SIZE_EXPECTED}"
+else
+    fail "vllm command missing --tensor-parallel-size ${VLLM_TENSOR_PARALLEL_SIZE_EXPECTED}"
+fi
+
+layout_device_in_pipeline="$(docker exec "${PIPELINE_CONTAINER_NAME}" /bin/sh -lc 'echo ${GLMOCR_LAYOUT_DEVICE:-}' 2>/dev/null || true)"
+if [[ "${layout_device_in_pipeline}" == "${LAYOUT_DEVICE_EXPECTED}" ]]; then
+    pass "pipeline GLMOCR_LAYOUT_DEVICE=${layout_device_in_pipeline}"
+else
+    fail "pipeline GLMOCR_LAYOUT_DEVICE='${layout_device_in_pipeline}' (expected '${LAYOUT_DEVICE_EXPECTED}')"
+fi
+
+layout_cuda_visible_devices_in_pipeline="$(docker exec "${PIPELINE_CONTAINER_NAME}" /bin/sh -lc 'echo ${CUDA_VISIBLE_DEVICES:-}' 2>/dev/null || true)"
+if [[ "${layout_cuda_visible_devices_in_pipeline}" == "${LAYOUT_GPU_DEVICES_EXPECTED}" ]]; then
+    pass "pipeline CUDA_VISIBLE_DEVICES=${layout_cuda_visible_devices_in_pipeline}"
+else
+    fail "pipeline CUDA_VISIBLE_DEVICES='${layout_cuda_visible_devices_in_pipeline}' (expected '${LAYOUT_GPU_DEVICES_EXPECTED}')"
+fi
+echo
+
 echo "== Container-to-Container Checks =="
 layout_in_backend="$(docker exec "${BACKEND_CONTAINER_NAME}" /bin/sh -lc 'echo ${LAYOUT_OCR_URL:-}' 2>/dev/null || true)"
 if [[ "${layout_in_backend}" == "${LAYOUT_OCR_URL_EXPECTED}" ]]; then
@@ -106,26 +145,6 @@ if docker exec "${PIPELINE_CONTAINER_NAME}" python -c "import urllib.request; ur
     pass "pipeline -> vllm:8000 reachable"
 else
     fail "pipeline -> vllm:8000 unreachable"
-fi
-
-layout_enabled_in_pipeline="$(docker exec "${PIPELINE_CONTAINER_NAME}" /bin/sh -lc 'echo ${GLMOCR_ENABLE_LAYOUT:-}' 2>/dev/null || true)"
-if [[ "${layout_enabled_in_pipeline}" == "true" ]]; then
-    pass "pipeline GLMOCR_ENABLE_LAYOUT=${layout_enabled_in_pipeline}"
-else
-    fail "pipeline GLMOCR_ENABLE_LAYOUT=${layout_enabled_in_pipeline} (expected true)"
-fi
-
-cuda_visible_devices_in_pipeline="$(docker exec "${PIPELINE_CONTAINER_NAME}" /bin/sh -lc 'echo ${CUDA_VISIBLE_DEVICES:-}' 2>/dev/null || true)"
-if [[ "${cuda_visible_devices_in_pipeline}" == "${PIPELINE_LAYOUT_GPU_DEVICE_EXPECTED}" ]]; then
-    pass "pipeline CUDA_VISIBLE_DEVICES=${cuda_visible_devices_in_pipeline}"
-else
-    fail "pipeline CUDA_VISIBLE_DEVICES=${cuda_visible_devices_in_pipeline} (expected ${PIPELINE_LAYOUT_GPU_DEVICE_EXPECTED})"
-fi
-
-if docker exec "${PIPELINE_CONTAINER_NAME}" python -c "import torch; raise SystemExit(0 if torch.cuda.is_available() else 1)" >/dev/null 2>&1; then
-    pass "pipeline torch.cuda.is_available()=True"
-else
-    fail "pipeline torch.cuda.is_available()=False"
 fi
 echo
 

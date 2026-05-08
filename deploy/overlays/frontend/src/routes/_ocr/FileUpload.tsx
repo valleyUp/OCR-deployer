@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
 	Check,
-	ClipboardCopy,
 	Clock,
 	FileText,
 	Loader2,
@@ -9,14 +8,17 @@ import {
 	UploadCloud
 } from 'lucide-react'
 import { cn } from '@/libs/utils'
-import { Badge } from '@/components/ui/badge'
 import {
-	uploadTask,
 	getTaskStatus,
+	uploadTask,
 	type TaskStatus,
 	type TaskStatusData
 } from '@/libs/api'
 import { toast } from 'sonner'
+import { useHistoryStore } from '@/store/useHistoryStore'
+import { useConfigStore } from '@/store/useConfigStore'
+import { formatFileSize } from '@/libs/format'
+import type { HistoryRecord } from '@/libs/historyDb'
 
 export type Layout = {
 	block_content: string
@@ -44,8 +46,9 @@ export interface TaskResponse {
 }
 
 interface FileUploadProps {
-	onFileUploaded: (params: UploadedFile) => void
-	onTaskStatusChange?: (params: TaskResponse) => void
+	currentLocalId: string | null
+	onActiveTaskChange: (localId: string | null) => void
+	onFileReady?: (uploadedFile: UploadedFile) => void
 }
 
 const ALLOWED_FILE_TYPES = [
@@ -55,15 +58,23 @@ const ALLOWED_FILE_TYPES = [
 	'application/pdf'
 ]
 const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.pdf']
-const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB in bytes
 type ProcessingMode = 'pipeline' | 'formula'
 const CLIPBOARD_IMAGE_PREFIX = 'clipboard-image'
+const POLL_INTERVAL_MS = 2000
 
 const STAGE_STEPS: { id: string; label: string; matchers: string[] }[] = [
 	{ id: 'upload', label: '上传', matchers: ['upload', 'queued', 'pending'] },
-	{ id: 'layout', label: '版面分析', matchers: ['layout', 'detect', 'parse', 'page'] },
-	{ id: 'recognize', label: '识别中', matchers: ['recogniz', 'ocr', 'formula', 'text', 'generate'] },
-	{ id: 'finalize', label: '整理结果', matchers: ['merge', 'render', 'finaliz', 'serializ', 'export'] }
+	{ id: 'pdf_to_image', label: '读取文件', matchers: ['pdf_to_image', 'image'] },
+	{
+		id: 'layout_and_ocr',
+		label: '识别与版面',
+		matchers: ['layout_and_ocr', 'layout', 'ocr', 'recogniz']
+	},
+	{
+		id: 'result_merge',
+		label: '整理结果',
+		matchers: ['result_merge', 'merge', 'render', 'finaliz']
+	}
 ]
 
 const MODE_OPTIONS: {
@@ -123,14 +134,6 @@ const isValidFileType = (file: File): boolean => {
 	return ALLOWED_EXTENSIONS.some(ext => fileName.endsWith(ext))
 }
 
-const isValidFileSize = (file: File): boolean => file.size <= MAX_FILE_SIZE
-
-const formatFileSize = (bytes: number): string => {
-	if (bytes < 1024) return `${bytes} B`
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 const resolveStageIndex = (stage?: string | null): number => {
 	if (!stage) return 0
 	const lower = stage.toLowerCase()
@@ -142,185 +145,238 @@ const resolveStageIndex = (stage?: string | null): number => {
 	return 0
 }
 
+function generateLocalId(): string {
+	if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+		return crypto.randomUUID()
+	}
+	return `u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function taskStatusToHistory(status: TaskStatus): HistoryRecord['status'] {
+	if (status === 'pending') return 'pending'
+	if (status === 'processing') return 'processing'
+	if (status === 'completed') return 'completed'
+	return 'failed'
+}
+
 export function FileUpload({
-	onFileUploaded,
-	onTaskStatusChange
+	currentLocalId,
+	onActiveTaskChange,
+	onFileReady
 }: FileUploadProps) {
-	const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null)
+	const upsertHistory = useHistoryStore(s => s.upsert)
+	const historyRecords = useHistoryStore(s => s.records)
+	const maxUploadMb = useConfigStore(s => s.maxUploadMb)
+
 	const [isDragging, setIsDragging] = useState(false)
-	const [processingMode, setProcessingMode] = useState<ProcessingMode>('pipeline')
-	const [isLoading, setIsLoading] = useState(false)
-	const [latestStatus, setLatestStatus] = useState<TaskStatusData | null>(null)
-	const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
-	const [taskIdCopied, setTaskIdCopied] = useState(false)
+	const [processingMode, setProcessingMode] =
+		useState<ProcessingMode>('pipeline')
 
 	const fileInputRef = useRef<HTMLInputElement>(null)
-	const pollingIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
+	const pollingIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(
+		new Map()
+	)
 
-	const handleDragOver = (e: React.DragEvent) => {
-		if (isLoading) return
-		e.preventDefault()
-		setIsDragging(true)
-	}
+	const activeRecord = useMemo(
+		() => historyRecords.find(r => r.localId === currentLocalId) ?? null,
+		[historyRecords, currentLocalId]
+	)
 
-	const handleDragLeave = (e: React.DragEvent) => {
-		if (isLoading) return
-		e.preventDefault()
-		setIsDragging(false)
-	}
+	const maxUploadBytes = useMemo(
+		() => Math.max(1, maxUploadMb) * 1024 * 1024,
+		[maxUploadMb]
+	)
 
-	const handleDrop = (e: React.DragEvent) => {
-		if (isLoading) return
-		e.preventDefault()
-		setIsDragging(false)
-		const droppedFiles = Array.from(e.dataTransfer.files)
-		if (droppedFiles.length > 0) handleFile(droppedFiles[0])
-	}
-
-	const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-		if (isLoading) return
-		const selectedFiles = e.target.files
-		if (selectedFiles && selectedFiles.length > 0) {
-			handleFile(selectedFiles[0])
-			if (fileInputRef.current) fileInputRef.current.value = ''
+	const stopPolling = (localId: string) => {
+		const handle = pollingIntervalsRef.current.get(localId)
+		if (handle) {
+			clearInterval(handle)
+			pollingIntervalsRef.current.delete(localId)
 		}
+	}
+
+	const pollOnce = async (localId: string, taskId: string | number) => {
+		try {
+			const response = await getTaskStatus(taskId)
+			const status = taskStatusToHistory(response.status)
+			const stage = response.current_stage ?? response.current_step ?? undefined
+			const progress = response.progress ?? undefined
+			const executionTime = response.execution_time
+			const totalPages = response.metadata?.total_pages
+			await upsertHistory({
+				localId,
+				taskId,
+				status,
+				currentStage: stage,
+				progress,
+				startedAt:
+					status === 'processing' || status === 'completed' || status === 'failed'
+						? Date.now()
+						: undefined,
+				completedAt:
+					status === 'completed' || status === 'failed' ? Date.now() : undefined,
+				executionTime,
+				totalPages,
+				errorMessage: response.error_message ?? null,
+				result: status === 'completed' ? response : null
+			})
+			if (status === 'completed' || status === 'failed') {
+				stopPolling(localId)
+			}
+		} catch (error) {
+			console.error('[upload] polling failed:', error)
+			stopPolling(localId)
+		}
+	}
+
+	const startPolling = (localId: string, taskId: string | number) => {
+		stopPolling(localId)
+		void pollOnce(localId, taskId)
+		const handle = setInterval(
+			() => void pollOnce(localId, taskId),
+			POLL_INTERVAL_MS
+		)
+		pollingIntervalsRef.current.set(localId, handle)
 	}
 
 	const handleFile = async (file: File) => {
+		const localId = generateLocalId()
+		const baseRecord: Partial<HistoryRecord> & { localId: string } = {
+			localId,
+			fileName: file.name,
+			fileSize: file.size,
+			fileType: normalizeFileType(file),
+			processingMode,
+			status: 'pending',
+			createdAt: Date.now()
+		}
+
 		if (!isValidFileType(file)) {
-			toast.error(
-				`不支持的文件格式。支持：${ALLOWED_EXTENSIONS.join(', ').toUpperCase()}`
-			)
-			if (fileInputRef.current) fileInputRef.current.value = ''
+			const msg = `不支持的格式：${ALLOWED_EXTENSIONS.join(', ').toUpperCase()}`
+			toast.error(msg)
+			await upsertHistory({
+				...baseRecord,
+				status: 'failed',
+				errorMessage: msg,
+				completedAt: Date.now()
+			})
 			return
 		}
-		if (!isValidFileSize(file)) {
-			toast.error(
-				`文件过大。${formatFileSize(file.size)} / ${formatFileSize(MAX_FILE_SIZE)}`
-			)
-			if (fileInputRef.current) fileInputRef.current.value = ''
+		if (file.size > maxUploadBytes) {
+			const msg = `文件过大：${formatFileSize(file.size)} / 上限 ${maxUploadMb} MB`
+			toast.error(msg)
+			await upsertHistory({
+				...baseRecord,
+				status: 'failed',
+				errorMessage: msg,
+				completedAt: Date.now()
+			})
 			return
 		}
 
-		setIsLoading(true)
-		setLatestStatus(null)
-		setCurrentTaskId(null)
-		const uploadedFile: UploadedFile = {
-			id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+		await upsertHistory(baseRecord)
+		onActiveTaskChange(localId)
+
+		// Provide the real File reference for the preview pane while the
+		// task is still processing (history records cannot hold File objects).
+		const now = new Date()
+		onFileReady?.({
+			id: localId,
 			name: file.name,
 			size: file.size,
 			type: normalizeFileType(file),
-			file: file,
-			uploadTime: new Date(),
+			file,
+			uploadTime: now,
 			error: null,
 			processingMode
-		}
-		setSelectedFile(uploadedFile)
+		})
 
 		try {
-			const uploadParams: Parameters<typeof uploadTask>[0] = {
+			const response = await uploadTask({
 				file,
 				custom_url: undefined,
 				processing_mode: processingMode
-			}
-			const response = await uploadTask(uploadParams)
+			})
 			const taskId = String(response.task_id)
-			setCurrentTaskId(taskId)
-			onFileUploaded(uploadedFile)
-			if (taskId) startPolling(uploadedFile.id, taskId)
+			await upsertHistory({ localId, taskId, status: 'pending' })
+			startPolling(localId, taskId)
 		} catch (error: any) {
 			const errorMessage =
 				error.response?.data?.message || error.message || '文件上传失败'
 			toast.error(errorMessage)
-			setSelectedFile(null)
-			setIsLoading(false)
+			await upsertHistory({
+				localId,
+				status: 'failed',
+				errorMessage,
+				completedAt: Date.now()
+			})
 		}
 	}
 
-	const handlePaste = (e: ClipboardEvent) => {
-		if (isLoading || e.defaultPrevented || isEditablePasteTarget(e.target)) return
-		const clipboardItems = Array.from(e.clipboardData?.items ?? [])
-		const imageItem = clipboardItems.find(
-			item => item.kind === 'file' && item.type.startsWith('image/')
-		)
-		if (!imageItem) return
-		const pastedFile = imageItem.getAsFile()
-		if (!pastedFile) return
-		e.preventDefault()
-		void handleFile(createClipboardImageFile(pastedFile))
+	const handleDragOver = (event: React.DragEvent) => {
+		event.preventDefault()
+		setIsDragging(true)
+	}
+	const handleDragLeave = (event: React.DragEvent) => {
+		event.preventDefault()
+		setIsDragging(false)
+	}
+	const handleDrop = (event: React.DragEvent) => {
+		event.preventDefault()
+		setIsDragging(false)
+		const files = Array.from(event.dataTransfer.files)
+		if (files.length === 0) return
+		files.forEach(file => void handleFile(file))
 	}
 
-	const startPolling = (fileId: string, taskId: string | number) => {
-		stopPolling(fileId)
-		pollTaskStatus(fileId, taskId)
-		const interval = setInterval(
-			() => pollTaskStatus(fileId, taskId),
-			2000
-		)
-		pollingIntervalsRef.current.set(fileId, interval)
-	}
-
-	const stopPolling = (fileId: string) => {
-		const interval = pollingIntervalsRef.current.get(fileId)
-		if (interval) {
-			clearInterval(interval)
-			pollingIntervalsRef.current.delete(fileId)
-		}
-	}
-
-	const pollTaskStatus = async (fileId: string, taskId: string | number) => {
-		try {
-			const response = await getTaskStatus(taskId)
-			const { status, error_message } = response
-			setLatestStatus(response)
-			onTaskStatusChange?.({ fileId, status, response, error_message })
-			if (status === 'completed' || status === 'failed') {
-				stopPolling(fileId)
-				setIsLoading(false)
-			}
-		} catch (error: any) {
-			console.error('查询任务状态失败:', error)
-			stopPolling(fileId)
-			setIsLoading(false)
-		}
+	const handleFileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+		const files = event.target.files
+		if (!files || files.length === 0) return
+		Array.from(files).forEach(file => void handleFile(file))
+		if (fileInputRef.current) fileInputRef.current.value = ''
 	}
 
 	useEffect(() => {
+		const intervals = pollingIntervalsRef.current
 		return () => {
-			pollingIntervalsRef.current.forEach(interval => clearInterval(interval))
-			pollingIntervalsRef.current.clear()
+			intervals.forEach(handle => clearInterval(handle))
+			intervals.clear()
 		}
 	}, [])
 
 	useEffect(() => {
+		const handlePaste = (event: ClipboardEvent) => {
+			if (event.defaultPrevented || isEditablePasteTarget(event.target)) return
+			const items = Array.from(event.clipboardData?.items ?? [])
+			const image = items.find(
+				item => item.kind === 'file' && item.type.startsWith('image/')
+			)
+			if (!image) return
+			const file = image.getAsFile()
+			if (!file) return
+			event.preventDefault()
+			void handleFile(createClipboardImageFile(file))
+		}
 		window.addEventListener('paste', handlePaste)
 		return () => window.removeEventListener('paste', handlePaste)
-	}, [isLoading, processingMode])
+	}, [processingMode, maxUploadBytes, maxUploadMb])
 
-	const copyTaskId = async () => {
-		if (!currentTaskId) return
-		try {
-			await navigator.clipboard.writeText(currentTaskId)
-			setTaskIdCopied(true)
-			toast.success('已复制 task ID')
-			window.setTimeout(() => setTaskIdCopied(false), 1200)
-		} catch {
-			toast.error('复制失败')
-		}
-	}
-
-	const stageIndex = resolveStageIndex(latestStatus?.current_stage)
-	const showTimeline = isLoading || latestStatus?.status === 'processing'
+	const showTimeline =
+		activeRecord?.status === 'pending' || activeRecord?.status === 'processing'
+	const stageIndex = resolveStageIndex(activeRecord?.currentStage)
+	const pendingCount = historyRecords.filter(
+		r => r.status === 'pending' || r.status === 'processing'
+	).length
 
 	return (
-		<div className='flex h-full flex-col bg-white'>
+		<div className='flex shrink-0 flex-col bg-white'>
 			<div className='flex flex-col gap-4 p-4'>
 				<div>
 					<h2 className='text-[15px] font-semibold tracking-tight text-foreground'>
 						文件上传
 					</h2>
 					<p className='mt-0.5 text-[11px] text-muted-foreground'>
-						拖拽、点击选择或粘贴图片
+						拖拽、点击或粘贴；支持多选
 					</p>
 				</div>
 
@@ -333,15 +389,13 @@ export function FileUpload({
 								<button
 									key={option.id}
 									type='button'
-									disabled={isLoading}
 									aria-pressed={active}
 									onClick={() => setProcessingMode(option.id)}
 									className={cn(
 										'flex flex-col items-center gap-0.5 rounded-md px-2 py-1.5 transition-[background-color,color,box-shadow] duration-200',
 										active
 											? 'bg-white text-foreground shadow-sm ring-1 ring-border'
-											: 'text-muted-foreground hover:text-foreground',
-										isLoading && 'cursor-not-allowed opacity-60'
+											: 'text-muted-foreground hover:text-foreground'
 									)}>
 									<span className='flex items-center gap-1.5 text-[13px] font-medium'>
 										<Icon className='size-4' />
@@ -358,9 +412,7 @@ export function FileUpload({
 
 				<div
 					className={cn(
-						'relative rounded-xl border-2 border-dashed px-4 py-8 text-center transition-[background-color,border-color,transform] duration-200',
-						isLoading && 'cursor-wait opacity-80',
-						!isLoading && 'cursor-pointer',
+						'relative cursor-pointer rounded-xl border-2 border-dashed px-4 py-7 text-center transition-[background-color,border-color,transform] duration-200',
 						isDragging
 							? 'scale-[1.01] border-primary bg-primary/5'
 							: 'border-zinc-300 hover:border-primary/50 hover:bg-zinc-50'
@@ -368,66 +420,59 @@ export function FileUpload({
 					onDragOver={handleDragOver}
 					onDragLeave={handleDragLeave}
 					onDrop={handleDrop}
-					onClick={() => {
-						if (!isLoading) fileInputRef.current?.click()
-					}}>
-					{selectedFile?.file && isLoading ? (
-						<div className='flex flex-col items-center gap-2'>
-							<Loader2 className='size-7 animate-spin text-primary' />
-							<p className='line-clamp-2 break-all text-sm font-medium leading-5'>
-								{selectedFile.name}
-							</p>
-							<p className='text-[11px] text-muted-foreground'>
-								{formatFileSize(selectedFile.size)}
-							</p>
-						</div>
-					) : (
-						<div className='flex flex-col items-center gap-2'>
-							<span
+					onClick={() => fileInputRef.current?.click()}>
+					<div className='flex flex-col items-center gap-2'>
+						<span
+							className={cn(
+								'flex size-11 items-center justify-center rounded-full transition-colors duration-200',
+								isDragging
+									? 'bg-primary/10 text-primary'
+									: 'bg-zinc-100 text-zinc-500'
+							)}>
+							<UploadCloud
 								className={cn(
-									'flex size-12 items-center justify-center rounded-full transition-colors duration-200',
-									isDragging
-										? 'bg-primary/10 text-primary'
-										: 'bg-zinc-100 text-zinc-500'
-								)}>
-								<UploadCloud
-									className={cn(
-										'size-6',
-										isDragging && 'motion-safe:animate-bounce'
-									)}
-								/>
-							</span>
-							<p className='text-sm font-medium text-foreground'>
-								{isDragging ? '松手上传文件' : '点击或拖拽到此处'}
-							</p>
-							<p className='flex items-center justify-center gap-1 text-[11px] text-muted-foreground'>
-								或按 <kbd>⌘</kbd>
-								<span className='text-muted-foreground/70'>/</span>
-								<kbd>Ctrl</kbd>
-								<kbd>V</kbd> 粘贴图片
-							</p>
-							<p className='text-[11px] text-muted-foreground/80'>
-								PNG · JPG · JPEG · PDF · 最大 20 MB
-							</p>
-						</div>
-					)}
+									'size-5',
+									isDragging && 'motion-safe:animate-bounce'
+								)}
+							/>
+						</span>
+						<p className='text-[13px] font-medium text-foreground'>
+							{isDragging ? '松手上传文件' : '点击或拖拽到此处'}
+						</p>
+						<p className='flex items-center justify-center gap-1 text-[11px] text-muted-foreground'>
+							或按 <kbd>⌘</kbd>
+							<span className='text-muted-foreground/70'>/</span>
+							<kbd>Ctrl</kbd>
+							<kbd>V</kbd> 粘贴图片
+						</p>
+						<p className='text-[10.5px] text-muted-foreground/80'>
+							PNG · JPG · PDF · 最大 {maxUploadMb} MB · 支持多选
+						</p>
+					</div>
 				</div>
 
 				<input
 					ref={fileInputRef}
 					type='file'
+					multiple
 					className='hidden'
 					accept='image/*,.pdf'
-					disabled={isLoading}
 					onChange={handleFileInput}
 				/>
+
+				{pendingCount > 0 && (
+					<p className='text-[11px] text-muted-foreground'>
+						{pendingCount} 个任务处理中
+						<Loader2 className='ml-1 inline size-3 animate-spin align-[-2px]' />
+					</p>
+				)}
 			</div>
 
-			{showTimeline && (
+			{showTimeline && activeRecord && (
 				<div className='mx-4 mb-4 rounded-lg border border-border bg-zinc-50/80 p-3'>
-					<div className='mb-3 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
+					<div className='mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
 						<Clock className='size-3.5' />
-						{latestStatus?.current_stage || '排队中'}
+						{activeRecord.currentStage || '排队中'}
 					</div>
 					<ol className='space-y-2'>
 						{STAGE_STEPS.map((step, index) => {
@@ -443,7 +488,8 @@ export function FileUpload({
 										className={cn(
 											'flex size-4 items-center justify-center rounded-full transition-colors duration-200',
 											state === 'done' && 'bg-primary text-primary-foreground',
-											state === 'active' && 'bg-primary text-primary-foreground motion-safe:animate-pulse',
+											state === 'active' &&
+												'bg-primary text-primary-foreground motion-safe:animate-pulse',
 											state === 'idle' && 'bg-zinc-200 text-muted-foreground'
 										)}>
 										{state === 'done' ? (
@@ -455,9 +501,7 @@ export function FileUpload({
 									<span
 										className={cn(
 											'text-[12px]',
-											state === 'idle'
-												? 'text-muted-foreground'
-												: 'text-foreground'
+											state === 'idle' ? 'text-muted-foreground' : 'text-foreground'
 										)}>
 										{step.label}
 									</span>
@@ -465,45 +509,6 @@ export function FileUpload({
 							)
 						})}
 					</ol>
-				</div>
-			)}
-
-			{selectedFile && !isLoading && (
-				<div className='mx-4 mb-4 space-y-2 rounded-lg border border-border bg-white p-3 text-[12px]'>
-					<div className='flex items-start gap-2'>
-						<FileText className='mt-0.5 size-3.5 shrink-0 text-muted-foreground' />
-						<p className='line-clamp-2 break-all font-medium text-foreground'>
-							{selectedFile.name}
-						</p>
-					</div>
-					<div className='flex flex-wrap items-center gap-1.5 text-muted-foreground'>
-						<Badge
-							variant='outline'
-							className='h-5 rounded-full px-2 text-[10px] font-normal'>
-							{formatFileSize(selectedFile.size)}
-						</Badge>
-						<Badge
-							variant='outline'
-							className='h-5 rounded-full px-2 text-[10px] font-normal'>
-							{selectedFile.processingMode === 'formula' ? '公式' : '文档'}
-						</Badge>
-						{currentTaskId && (
-							<button
-								type='button'
-								onClick={copyTaskId}
-								aria-label='复制任务 ID'
-								className={cn(
-									'ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-zinc-100 hover:text-foreground'
-								)}>
-								{taskIdCopied ? (
-									<Check className='size-3' />
-								) : (
-									<ClipboardCopy className='size-3' />
-								)}
-								<span className='max-w-[5.5rem] truncate'>{currentTaskId}</span>
-							</button>
-						)}
-					</div>
 				</div>
 			)}
 		</div>

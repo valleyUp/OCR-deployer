@@ -11,7 +11,7 @@ import type { HistoryRecord } from '@/libs/historyDb'
 import '@/styles-overlay.css'
 
 const RESULTS_WIDTH_KEY = 'ocr-deployer:resultsWidth'
-const RESULTS_WIDTH_DEFAULT = 560
+const RESULTS_WIDTH_DEFAULT = 528
 const RESULTS_WIDTH_MIN = 360
 const RESULTS_WIDTH_MAX = 1100
 
@@ -58,9 +58,6 @@ export function OCRPage() {
 	const [currentLocalId, setCurrentLocalId] = useState<string | null>(null)
 	const [resultsWidth, setResultsWidth] = useState<number>(RESULTS_WIDTH_DEFAULT)
 
-	// Live uploads have real File references that cannot be serialised
-	// into history. Keep a side-map so FilePreview can render before the
-	// task completes.
 	const liveFilesRef = useRef<Map<string, UploadedFile>>(new Map())
 	const [, setLiveFilesVersion] = useState(0)
 
@@ -111,11 +108,11 @@ export function OCRPage() {
 	}
 
 	return (
-		<div className='flex h-screen flex-col overflow-hidden bg-zinc-50'>
+		<div className='flex h-screen flex-col overflow-hidden bg-background'>
 			<AppHeader uploadFile={uploadFile} result={parsedResult} />
 
 			<div className='flex min-h-0 flex-1 overflow-hidden'>
-				<aside className='flex w-60 shrink-0 flex-col overflow-hidden border-r border-border bg-white'>
+				<aside className='flex w-[320px] shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar'>
 					<FileUpload
 						currentLocalId={currentLocalId}
 						onActiveTaskChange={localId => {
@@ -130,7 +127,7 @@ export function OCRPage() {
 				</aside>
 
 				<main className='flex min-w-0 flex-1 overflow-hidden'>
-					<section className='flex min-w-0 flex-1 flex-col overflow-hidden bg-white'>
+					<section className='flex min-w-0 flex-1 flex-col overflow-hidden bg-card'>
 						<FilePreview file={uploadFile} result={parsedResult} />
 					</section>
 
@@ -146,7 +143,7 @@ export function OCRPage() {
 					/>
 
 					<section
-						className='flex shrink-0 flex-col overflow-hidden border-l border-border bg-white'
+						className='flex shrink-0 flex-col overflow-hidden border-l border-border bg-card'
 						style={{ width: `${resultsWidth}px` }}>
 						<OCRResults result={parsedResult} fileName={uploadFile?.name} />
 					</section>

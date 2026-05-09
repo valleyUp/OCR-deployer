@@ -45,13 +45,12 @@ const MODE_LABEL: Record<HistoryRecord['processingMode'], string> = {
 }
 
 function StatusBadge({ status }: { status: HistoryRecord['status'] }) {
-	const isActive = status === 'processing' || status === 'pending'
 	const tone: Record<HistoryRecord['status'], string> = {
-		pending: 'bg-zinc-100 text-zinc-600',
+		pending: 'bg-secondary text-muted-foreground',
 		processing: 'bg-amber-50 text-amber-700',
 		completed: 'bg-emerald-50 text-emerald-700',
 		failed: 'bg-red-50 text-red-700',
-		cancelled: 'bg-zinc-100 text-zinc-500'
+		cancelled: 'bg-secondary text-muted-foreground'
 	}
 	const Icon =
 		status === 'completed'
@@ -64,14 +63,13 @@ function StatusBadge({ status }: { status: HistoryRecord['status'] }) {
 	return (
 		<span
 			className={cn(
-				'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+				'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10.5px] font-medium',
 				tone[status]
 			)}>
 			<Icon
 				className={cn(
 					'size-2.5',
-					status === 'processing' && 'animate-spin',
-					isActive && 'motion-safe:animate-pulse'
+					status === 'processing' && 'dot-pulse'
 				)}
 			/>
 			{STATUS_LABEL[status]}
@@ -130,13 +128,14 @@ function HistoryItem({
 			}}
 			aria-disabled={!clickable}
 			className={cn(
-				'group relative block border-b border-zinc-100 px-3 py-2.5 text-left transition-colors duration-150',
-				clickable && 'cursor-pointer hover:bg-zinc-50',
-				active && 'bg-primary/5 ring-1 ring-inset ring-primary/40',
+				'group relative block border-b border-border px-5 py-3.5 text-left transition-all duration-260',
+				clickable && 'cursor-pointer hover:bg-accent/40 hover:shadow-sm',
+				active && 'bg-accent/60 ring-1 ring-inset ring-primary/30',
 				!clickable && 'cursor-default opacity-70'
-			)}>
-			<div className='flex items-start gap-2'>
-				<span className='mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-zinc-500'>
+			)}
+			style={{ borderRadius: '12px', margin: '4px 8px' }}>
+			<div className='flex items-start gap-3'>
+				<span className='mt-0.5 flex size-[30px] shrink-0 items-center justify-center rounded-[8px] bg-secondary text-muted-foreground'>
 					{(() => {
 						const Icon = icon
 						return <Icon className='size-3.5' />
@@ -144,20 +143,22 @@ function HistoryItem({
 				</span>
 				<div className='min-w-0 flex-1'>
 					<div className='flex items-center gap-1.5'>
-						<p className='truncate text-[12px] font-medium text-foreground'>
+						<p className='truncate text-[13px] font-medium text-foreground'>
 							{record.fileName}
 						</p>
 						<Badge
 							variant='outline'
-							className='h-4 shrink-0 rounded-full px-1.5 text-[9px] font-normal'>
+							className='h-4 shrink-0 rounded-full px-1.5 text-[9.5px] font-normal'
+							style={{ fontFamily: 'var(--font-mono)' }}>
 							{MODE_LABEL[record.processingMode]}
 						</Badge>
 					</div>
-					<div className='mt-0.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-muted-foreground'>
+					<div className='mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]'
+						style={{ fontFamily: 'var(--font-mono)' }}>
 						<StatusBadge status={record.status} />
-						<span>{formatFileSize(record.fileSize)}</span>
-						<span>·</span>
-						<span>
+						<span className='text-muted-foreground'>{formatFileSize(record.fileSize)}</span>
+						<span className='text-muted-foreground'>·</span>
+						<span className='text-muted-foreground'>
 							{record.status === 'completed'
 								? formatDuration(record.executionTime)
 								: record.status === 'pending' || record.status === 'processing'
@@ -167,10 +168,13 @@ function HistoryItem({
 					</div>
 					{record.status === 'processing' && (
 						<div className='mt-1.5'>
-							<div className='h-1 overflow-hidden rounded-full bg-zinc-100'>
+							<div className='h-1.5 overflow-hidden rounded-full bg-secondary'>
 								<div
-									className='h-full bg-primary transition-[width] duration-300 ease-out'
-									style={{ width: `${progressValue}%` }}
+									className='h-full rounded-full transition-[width] duration-500'
+									style={{
+										width: `${progressValue}%`,
+										background: 'linear-gradient(90deg, var(--primary), #A8875A)'
+									}}
 								/>
 							</div>
 							{record.currentStage && (
@@ -181,7 +185,7 @@ function HistoryItem({
 						</div>
 					)}
 					{record.status === 'failed' && record.errorMessage && (
-						<p className='mt-1 line-clamp-2 break-all text-[10px] text-red-600'>
+						<p className='mt-1 line-clamp-2 break-all text-[10px] text-destructive'>
 							{record.errorMessage}
 						</p>
 					)}
@@ -192,8 +196,9 @@ function HistoryItem({
 								onClick={handleCopyTaskId}
 								aria-label='复制任务 ID'
 								className={cn(
-									'inline-flex items-center gap-1 rounded-md px-1 py-0.5 font-mono text-[9.5px] text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground'
-								)}>
+									'inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground'
+								)}
+								style={{ fontFamily: 'var(--font-mono)' }}>
 								{idCopied ? (
 									<Check className='size-2.5' />
 								) : (
@@ -206,7 +211,7 @@ function HistoryItem({
 							type='button'
 							onClick={handleDelete}
 							aria-label='删除记录'
-							className='ml-auto inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 opacity-0 group-hover:opacity-100 focus-visible:opacity-100'>
+							className='ml-auto inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive opacity-0 group-hover:opacity-100 focus-visible:opacity-100'>
 							<Trash2 className='size-3' />
 						</button>
 					</div>
@@ -247,14 +252,16 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 	}
 
 	return (
-		<div className='flex min-h-0 flex-1 flex-col border-t border-border bg-white'>
-			<div className='flex items-center justify-between gap-2 border-b border-border px-3 py-2'>
-				<div className='flex flex-1 items-center gap-1.5 text-[12px] font-semibold tracking-tight text-foreground/90'>
+		<div className='flex min-h-0 flex-1 flex-col border-t border-border bg-sidebar'>
+			<div className='flex items-center justify-between gap-2 border-b border-border px-5 py-3'>
+				<div className='flex flex-1 items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground'
+					style={{ fontFamily: 'var(--font-mono)' }}>
 					<History className='size-3.5 text-muted-foreground' />
 					历史记录
 					<Badge
 						variant='outline'
-						className='h-4 rounded-full px-1.5 text-[10px] font-normal'>
+						className='h-4 rounded-full px-1.5 text-[10px] font-normal'
+						style={{ fontFamily: 'var(--font-mono)' }}>
 						{records.length}
 					</Badge>
 				</div>
@@ -263,27 +270,28 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 						variant='ghost'
 						size='icon-sm'
 						aria-label='清空历史'
-						className='text-muted-foreground hover:text-red-600'
+						className='text-muted-foreground hover:text-destructive'
 						onClick={() => setConfirmClear(true)}>
 						<Trash2 className='size-3.5' />
 					</Button>
 				)}
 			</div>
 
-			<div className='flex-1 overflow-auto'>
+			<div className='flex-1 overflow-auto py-1'>
 				{records.length === 0 ? (
-					<div className='flex h-full min-h-[6rem] items-center justify-center px-4 py-6 text-center text-[11px] text-muted-foreground'>
+					<div className='flex h-full min-h-[6rem] items-center justify-center px-4 py-6 text-center text-[12px] text-muted-foreground'>
 						还没有识别任务
 					</div>
 				) : (
-					records.map(record => (
-						<HistoryItem
-							key={record.localId}
-							record={record}
-							active={active?.localId === record.localId}
-							onSelect={() => void handleSelect(record)}
-							onDelete={() => void remove(record.localId)}
-						/>
+					records.map((record, index) => (
+						<div key={record.localId} className='history-enter' style={{ animationDelay: `${index * 50}ms` }}>
+							<HistoryItem
+								record={record}
+								active={active?.localId === record.localId}
+								onSelect={() => void handleSelect(record)}
+								onDelete={() => void remove(record.localId)}
+							/>
+						</div>
 					))
 				)}
 			</div>

@@ -176,10 +176,13 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 
 	if (!file) {
 		return (
-			<div className='flex h-full items-center justify-center bg-zinc-50'>
-				<div className='max-w-xs rounded-lg border border-dashed border-border bg-white/70 px-6 py-8 text-center text-sm text-muted-foreground'>
-					<p className='text-base font-medium text-foreground/80'>尚无文件</p>
-					<p className='mt-1 text-muted-foreground'>
+			<div className='flex h-full items-center justify-center bg-background'>
+				<div className='max-w-xs rounded-xl border border-dashed border-border bg-card/70 px-10 py-12 text-center text-sm text-muted-foreground paper-stack'>
+					<p className='text-[20px] italic text-foreground/80'
+						style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em' }}>
+						尚无文件
+					</p>
+					<p className='mt-2 text-muted-foreground'>
 						从左侧上传、拖拽或粘贴图片开始
 					</p>
 				</div>
@@ -188,7 +191,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 	}
 
 	const imageToolbar = isImageFile ? (
-		<div className='pointer-events-auto absolute right-3 top-3 z-20 flex items-center gap-1 rounded-full border border-border bg-white/95 px-1 py-1 shadow-sm backdrop-blur-sm'>
+		<div className='pointer-events-auto absolute right-4 top-4 z-20 flex items-center gap-1 rounded-full border border-border bg-card/95 px-1.5 py-1 shadow-sm backdrop-blur-sm'>
 			<Button
 				variant='ghost'
 				size='icon-sm'
@@ -201,7 +204,8 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 				}>
 				<Minus className='size-4' />
 			</Button>
-			<span className='min-w-[3.25rem] text-center text-[11px] tabular-nums text-muted-foreground'>
+			<span className='min-w-[3.25rem] text-center text-[11px] tabular-nums text-muted-foreground'
+				style={{ fontFamily: 'var(--font-mono)' }}>
 				{Math.round(imageZoom * 100)}%
 			</span>
 			<Button
@@ -238,7 +242,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 	) : null
 
 	return (
-		<div className='relative flex h-full flex-col overflow-hidden bg-white'>
+		<div className='relative flex h-full flex-col overflow-hidden bg-card'>
 			{imageToolbar}
 
 			<div className='flex-1 min-h-0 overflow-hidden' ref={viewerRef}>

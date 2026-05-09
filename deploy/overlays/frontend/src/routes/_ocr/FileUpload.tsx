@@ -277,8 +277,6 @@ export function FileUpload({
 		await upsertHistory(baseRecord)
 		onActiveTaskChange(localId)
 
-		// Provide the real File reference for the preview pane while the
-		// task is still processing (history records cannot hold File objects).
 		const now = new Date()
 		onFileReady?.({
 			id: localId,
@@ -369,19 +367,21 @@ export function FileUpload({
 	).length
 
 	return (
-		<div className='flex shrink-0 flex-col bg-white'>
-			<div className='flex flex-col gap-4 p-4'>
+		<div className='flex shrink-0 flex-col bg-sidebar'>
+			<div className='flex flex-col gap-5 p-6'>
 				<div>
-					<h2 className='text-[15px] font-semibold tracking-tight text-foreground'>
+					<h2 className='text-[26px] italic tracking-tight text-foreground'
+						style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.015em' }}>
 						文件上传
 					</h2>
-					<p className='mt-0.5 text-[11px] text-muted-foreground'>
-						拖拽、点击或粘贴；支持多选
+					<p className='mt-0.5 text-[11.5px] uppercase tracking-[.1em] text-muted-foreground'
+						style={{ fontFamily: 'var(--font-mono)' }}>
+						拖拽 / 点击 / 粘贴
 					</p>
 				</div>
 
-				<div className='rounded-lg bg-zinc-100 p-1'>
-					<div className='grid grid-cols-2 gap-1 text-sm'>
+				<div className='relative rounded-xl border border-border bg-muted/50 p-1.5 shadow-inner'>
+					<div className='grid grid-cols-2 gap-1.5'>
 						{MODE_OPTIONS.map(option => {
 							const active = processingMode === option.id
 							const Icon = option.icon
@@ -392,16 +392,17 @@ export function FileUpload({
 									aria-pressed={active}
 									onClick={() => setProcessingMode(option.id)}
 									className={cn(
-										'flex flex-col items-center gap-0.5 rounded-md px-2 py-1.5 transition-[background-color,color,box-shadow] duration-200',
+										'relative z-10 flex flex-col items-center gap-0.5 rounded-[11px] px-2 py-2.5 transition-all duration-150',
 										active
-											? 'bg-white text-foreground shadow-sm ring-1 ring-border'
+											? 'bg-card text-foreground shadow-sm ring-1 ring-border'
 											: 'text-muted-foreground hover:text-foreground'
 									)}>
 									<span className='flex items-center gap-1.5 text-[13px] font-medium'>
 										<Icon className='size-4' />
 										{option.label}
 									</span>
-									<span className='text-[10px] text-muted-foreground/80'>
+									<span className='text-[10px]'
+										style={{ fontFamily: 'var(--font-mono)' }}>
 										{option.hint}
 									</span>
 								</button>
@@ -412,34 +413,36 @@ export function FileUpload({
 
 				<div
 					className={cn(
-						'relative cursor-pointer rounded-xl border-2 border-dashed px-4 py-7 text-center transition-[background-color,border-color,transform] duration-200',
+						'drop-corners relative cursor-pointer rounded-xl border-2 border-dashed px-4 py-9 text-center transition-all duration-260 overflow-hidden',
 						isDragging
-							? 'scale-[1.01] border-primary bg-primary/5'
-							: 'border-zinc-300 hover:border-primary/50 hover:bg-zinc-50'
+							? 'scale-[1.015] border-primary bg-accent'
+							: 'border-border hover:border-primary hover:bg-muted/50'
 					)}
 					onDragOver={handleDragOver}
 					onDragLeave={handleDragLeave}
 					onDrop={handleDrop}
 					onClick={() => fileInputRef.current?.click()}>
-					<div className='flex flex-col items-center gap-2'>
+					<div className='flex flex-col items-center gap-3'>
 						<span
 							className={cn(
-								'flex size-11 items-center justify-center rounded-full transition-colors duration-200',
+								'flex size-[52px] items-center justify-center rounded-[14px] transition-all duration-260',
 								isDragging
-									? 'bg-primary/10 text-primary'
-									: 'bg-zinc-100 text-zinc-500'
-							)}>
+									? 'bg-accent text-primary'
+									: 'bg-muted/50 text-primary'
+							)}
+							style={isDragging ? { transform: 'translateY(-3px) rotate(-3deg)' } : undefined}>
 							<UploadCloud
 								className={cn(
-									'size-5',
+									'size-5 transition-all duration-260',
 									isDragging && 'motion-safe:animate-bounce'
 								)}
 							/>
 						</span>
-						<p className='text-[13px] font-medium text-foreground'>
+						<p className='text-[20px] italic text-foreground'
+							style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em' }}>
 							{isDragging ? '松手上传文件' : '点击或拖拽到此处'}
 						</p>
-						<p className='flex items-center justify-center gap-1 text-[11px] text-muted-foreground'>
+						<p className='flex items-center justify-center gap-1 text-[12px] text-muted-foreground'>
 							或按 <kbd>⌘</kbd>
 							<span className='text-muted-foreground/70'>/</span>
 							<kbd>Ctrl</kbd>
@@ -463,18 +466,19 @@ export function FileUpload({
 				{pendingCount > 0 && (
 					<p className='text-[11px] text-muted-foreground'>
 						{pendingCount} 个任务处理中
-						<Loader2 className='ml-1 inline size-3 animate-spin align-[-2px]' />
+						<Loader2 className='ml-1 inline size-3 dot-pulse align-[-2px]' />
 					</p>
 				)}
 			</div>
 
 			{showTimeline && activeRecord && (
-				<div className='mx-4 mb-4 rounded-lg border border-border bg-zinc-50/80 p-3'>
-					<div className='mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
-						<Clock className='size-3.5' />
+				<div className='mx-6 mb-6 rounded-xl border border-border bg-card p-5 shadow-sm'>
+					<div className='mb-3 flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-widest text-muted-foreground'
+						style={{ fontFamily: 'var(--font-mono)' }}>
+						<span className='size-1.5 rounded-full bg-primary dot-pulse' />
 						{activeRecord.currentStage || '排队中'}
 					</div>
-					<ol className='space-y-2'>
+					<ol className='space-y-3 relative before:absolute before:left-[7px] before:top-1 before:bottom-1 before:w-px before:bg-border'>
 						{STAGE_STEPS.map((step, index) => {
 							const state =
 								index < stageIndex
@@ -483,14 +487,14 @@ export function FileUpload({
 										? 'active'
 										: 'idle'
 							return (
-								<li key={step.id} className='flex items-center gap-2'>
+								<li key={step.id} className='flex items-center gap-3 relative z-1'>
 									<span
 										className={cn(
-											'flex size-4 items-center justify-center rounded-full transition-colors duration-200',
-											state === 'done' && 'bg-primary text-primary-foreground',
+											'flex size-[14px] items-center justify-center rounded-full transition-all duration-260',
+											state === 'done' && 'bg-primary text-primary-foreground scale-105',
 											state === 'active' &&
-												'bg-primary text-primary-foreground motion-safe:animate-pulse',
-											state === 'idle' && 'bg-zinc-200 text-muted-foreground'
+												'bg-primary text-primary-foreground step-pulse',
+											state === 'idle' && 'bg-secondary text-muted-foreground'
 										)}>
 										{state === 'done' ? (
 											<Check className='size-2.5' />
@@ -500,7 +504,7 @@ export function FileUpload({
 									</span>
 									<span
 										className={cn(
-											'text-[12px]',
+											'text-[13px]',
 											state === 'idle' ? 'text-muted-foreground' : 'text-foreground'
 										)}>
 										{step.label}

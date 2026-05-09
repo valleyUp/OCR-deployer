@@ -1,21 +1,53 @@
 /*
- * Overlay-only global tweaks that the upstream styles.css does not provide:
- *   - unified focus-visible outline
- *   - reduced-motion override
- *   - relax the upstream body { min-width: 1200px } so the deployer shell
- *     looks reasonable at laptop widths (the fixed sidebar + flex main
- *     panels now scale on their own).
+ * Scheme C — Paper Craft: overlay animations and element overrides.
  */
 
+/* ---- Keyframe animations ---- */
+@keyframes shimmer {
+	0% { background-position: 200% 0; }
+	100% { background-position: -200% 0; }
+}
+
+@keyframes dotPulse {
+	0%, 100% { box-shadow: 0 0 0 0 var(--ring); }
+	50% { box-shadow: 0 0 0 6px transparent; }
+}
+
+@keyframes stepPulse {
+	0%, 100% { box-shadow: 0 0 0 0 var(--ring); }
+	50% { box-shadow: 0 0 0 8px transparent; }
+}
+
+@keyframes fadeUp {
+	from { opacity: 0; transform: translateY(10px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cornerExpand {
+	from { width: 0; height: 0; opacity: 0; }
+	to { width: 28px; height: 28px; opacity: 1; }
+}
+
+@keyframes paperReveal {
+	from { opacity: 0; transform: translateY(6px) scale(.99); }
+	to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ---- Global overrides ---- */
 html,
 body {
 	min-width: 960px;
 }
 
 *:focus-visible {
-	outline: 2px solid oklch(0.56 0.2 262);
-	outline-offset: 2px;
-	border-radius: 4px;
+	outline: 2px solid var(--primary);
+	outline-offset: 3px;
+	border-radius: 8px;
+}
+
+::selection {
+	background: #EFE4CF;
+	color: #26221B;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -29,6 +61,7 @@ body {
 	}
 }
 
+/* ---- kbd ---- */
 kbd {
 	display: inline-flex;
 	align-items: center;
@@ -37,12 +70,104 @@ kbd {
 	padding: 0 0.35rem;
 	height: 1.25rem;
 	border-radius: 0.35rem;
-	border: 1px solid oklch(0.88 0.005 286);
-	background: oklch(0.98 0.002 286);
-	box-shadow: 0 1px 0 oklch(0.88 0.005 286);
-	color: oklch(0.32 0.01 286);
-	font-family: inherit;
+	border: 1px solid rgba(40,35,27,.12);
+	background: #F3ECDB;
+	box-shadow: inset 0 -1px 0 rgba(40,35,27,.08);
+	color: #6E6454;
+	font-family: 'JetBrains Mono', ui-monospace, monospace;
 	font-size: 0.72rem;
 	font-weight: 500;
 	line-height: 1;
+}
+
+/* ---- Skeleton shimmer ---- */
+.skeleton-shimmer {
+	background: linear-gradient(110deg, #F3ECDB 30%, #F7F1E6 50%, #F3ECDB 70%);
+	background-size: 200% 100%;
+	animation: shimmer 1.6s linear infinite;
+}
+
+/* ---- Staggered fade-up ---- */
+.history-enter {
+	animation: fadeUp 260ms cubic-bezier(.16,1,.3,1) both;
+}
+
+/* ---- Dot pulse ---- */
+.dot-pulse {
+	animation: dotPulse 1.6s cubic-bezier(.85,0,.15,1) infinite;
+}
+
+/* ---- Step pulse ---- */
+.step-pulse {
+	animation: stepPulse 1.8s cubic-bezier(.85,0,.15,1) infinite;
+}
+
+/* ---- Paper stack shadows for preview ---- */
+.paper-stack {
+	box-shadow:
+		0 1px 2px rgba(60,45,25,.06),
+		0 2px 8px rgba(60,45,25,.04),
+		0 4px 16px rgba(60,45,25,.03);
+}
+
+/* ---- Drop zone corner decorations ---- */
+.drop-corners {
+	position: relative;
+}
+.drop-corners::before,
+.drop-corners::after {
+	content: '';
+	position: absolute;
+	width: 28px;
+	height: 28px;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 260ms cubic-bezier(.16,1,.3,1), transform 260ms cubic-bezier(.34,1.56,.64,1);
+}
+.drop-corners::before {
+	top: 0;
+	left: 0;
+	border-top: 2px solid var(--primary);
+	border-left: 2px solid var(--primary);
+	border-top-left-radius: 16px;
+	transform: translate(8px, 8px);
+}
+.drop-corners::after {
+	bottom: 0;
+	right: 0;
+	border-bottom: 2px solid var(--primary);
+	border-right: 2px solid var(--primary);
+	border-bottom-right-radius: 16px;
+	transform: translate(-8px, -8px);
+}
+.drop-corners:hover::before,
+.drop-corners:hover::after {
+	opacity: 0.5;
+	transform: translate(0, 0);
+}
+.drop-corners.is-drag::before,
+.drop-corners.is-drag::after {
+	opacity: 1;
+	transform: translate(0, 0);
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: rgba(40,35,27,.10);
+	border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: rgba(40,35,27,.18);
+}
+
+/* ---- Toast ---- */
+[data-sonner-toaster] {
+	font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif !important;
 }

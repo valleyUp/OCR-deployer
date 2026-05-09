@@ -36,28 +36,34 @@ export function AppHeader({ uploadFile, result }: AppHeaderProps) {
 	const modeLabel = MODE_LABELS[activeMode] ?? activeMode
 
 	return (
-		<header className='sticky top-0 z-40 flex h-12 shrink-0 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur-sm'>
-			<div className='flex items-center gap-2.5'>
-				<span className='flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground'>
-					<Sigma className='size-4' />
+		<header className='sticky top-0 z-40 flex h-[60px] shrink-0 items-center justify-between border-b border-border bg-background/88 px-8 backdrop-blur-lg'>
+			<div className='flex items-center gap-4'>
+				<span className='flex size-[34px] items-center justify-center rounded-[11px] bg-gradient-to-br from-primary to-[#A8875A] text-card text-[19px] shadow-sm'
+					style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic' }}>
+					G
 				</span>
-				<div className='flex items-baseline gap-1'>
-					<span className='text-[15px] font-semibold tracking-tight text-foreground'>
+				<div className='flex flex-col leading-none'>
+					<span className='text-[22px] italic tracking-tight text-foreground'
+						style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.015em' }}>
 						GLM-OCR
 					</span>
-					<span className='text-[11px] text-muted-foreground'>Studio</span>
+					<span className='mt-0.5 text-[9.5px] uppercase tracking-[.2em] text-muted-foreground'
+						style={{ fontFamily: 'var(--font-mono)' }}>
+						Studio
+					</span>
 				</div>
 			</div>
 
 			<div className='flex items-center gap-2'>
 				<Badge
 					variant='outline'
-					className='h-7 gap-1.5 rounded-full border-border px-3 text-[12px] font-medium text-foreground/80'>
+					className='h-[32px] gap-2 rounded-full border-border bg-muted/50 px-3.5 text-[12.5px] font-medium text-muted-foreground transition-all duration-150 hover:-translate-y-px hover:bg-card hover:text-foreground hover:shadow-sm'>
 					<span
 						className={cn(
 							'size-1.5 rounded-full',
-							activeMode === 'formula' ? 'bg-violet-500' : 'bg-emerald-500'
+							activeMode === 'formula' ? 'bg-primary' : 'bg-[#5B8A6F]'
 						)}
+						style={activeMode === 'formula' ? { boxShadow: '0 0 0 3px rgba(139,111,71,.22)' } : { boxShadow: '0 0 0 3px rgba(91,138,111,.20)' }}
 					/>
 					{modeLabel}
 				</Badge>
@@ -68,7 +74,7 @@ export function AppHeader({ uploadFile, result }: AppHeaderProps) {
 							variant='ghost'
 							size='icon-sm'
 							aria-label='打开帮助'
-							className='text-foreground/70 hover:text-foreground'>
+							className='size-[36px] rounded-[10px] text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all duration-150 active:scale-[.94]'>
 							<HelpCircle className='size-4' />
 						</Button>
 					</DialogTrigger>

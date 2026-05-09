@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { HelpCircle, Sigma } from 'lucide-react'
+import { CircleHelp, FileText, Radio, Sigma, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,23 +36,53 @@ export function AppHeader({ uploadFile, result }: AppHeaderProps) {
 	const modeLabel = MODE_LABELS[activeMode] ?? activeMode
 
 	return (
-		<header className='sticky top-0 z-40 flex h-12 shrink-0 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur-sm'>
-			<div className='flex items-center gap-2.5'>
-				<span className='flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground'>
-					<Sigma className='size-4' />
-				</span>
-				<div className='flex items-baseline gap-1'>
-					<span className='text-[15px] font-semibold tracking-tight text-foreground'>
-						GLM-OCR
-					</span>
-					<span className='text-[11px] text-muted-foreground'>Studio</span>
+		<header className='ocr-panel-toolbar sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between px-5'>
+			<div className='flex min-w-0 items-center gap-4'>
+				<div className='hidden items-center gap-2 lg:flex' aria-hidden='true'>
+					<span className='size-3 rounded-full bg-[#ff5f57] shadow-[0_0_0_1px_rgba(0,0,0,0.08)]' />
+					<span className='size-3 rounded-full bg-[#ffbd2e] shadow-[0_0_0_1px_rgba(0,0,0,0.08)]' />
+					<span className='size-3 rounded-full bg-[#28c840] shadow-[0_0_0_1px_rgba(0,0,0,0.08)]' />
 				</div>
+				<div className='flex min-w-0 items-center gap-3'>
+					<span className='relative flex size-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-cyan-500 to-emerald-400 text-white shadow-lg shadow-blue-500/20'>
+						<Sigma className='size-5' />
+						<span className='absolute -right-0.5 -top-0.5 size-2.5 rounded-full border border-white/80 bg-emerald-400' />
+					</span>
+					<div className='min-w-0'>
+						<div className='flex items-baseline gap-2'>
+							<span className='truncate text-[15px] font-semibold tracking-tight text-slate-950'>
+								GLM-OCR Studio
+							</span>
+							<span className='hidden rounded-full bg-slate-950/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 xl:inline-flex'>
+								Overlay
+							</span>
+						</div>
+						<p className='truncate text-[11px] text-slate-500'>
+							本地部署的文档与公式识别工作台
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<div className='hidden items-center gap-2 rounded-full border border-white/70 bg-white/50 px-2 py-1 shadow-sm xl:flex'>
+				<span className='ocr-pill h-8 px-3 text-[12px] font-medium'>
+					<Radio className='size-3.5 text-emerald-500' />
+					本地资源
+				</span>
+				<span className='ocr-pill h-8 px-3 text-[12px] font-medium'>
+					{activeMode === 'formula' ? (
+						<Sparkles className='size-3.5 text-violet-500' />
+					) : (
+						<FileText className='size-3.5 text-blue-500' />
+					)}
+					{modeLabel}
+				</span>
 			</div>
 
 			<div className='flex items-center gap-2'>
 				<Badge
 					variant='outline'
-					className='h-7 gap-1.5 rounded-full border-border px-3 text-[12px] font-medium text-foreground/80'>
+					className='ocr-pill h-8 gap-1.5 border-transparent px-3 text-[12px] font-medium text-slate-700 xl:hidden'>
 					<span
 						className={cn(
 							'size-1.5 rounded-full',
@@ -68,11 +98,11 @@ export function AppHeader({ uploadFile, result }: AppHeaderProps) {
 							variant='ghost'
 							size='icon-sm'
 							aria-label='打开帮助'
-							className='text-foreground/70 hover:text-foreground'>
-							<HelpCircle className='size-4' />
+							className='ocr-icon-button size-9 rounded-full text-slate-500 hover:bg-white hover:text-blue-600'>
+							<CircleHelp className='size-4' />
 						</Button>
 					</DialogTrigger>
-					<DialogContent className='sm:max-w-[520px]'>
+					<DialogContent className='border-white/70 bg-white/90 shadow-2xl backdrop-blur-xl sm:max-w-[520px]'>
 						<DialogHeader>
 							<DialogTitle>使用说明</DialogTitle>
 							<DialogDescription>常用操作与支持范围</DialogDescription>

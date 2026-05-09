@@ -11,9 +11,9 @@ import type { HistoryRecord } from '@/libs/historyDb'
 import '@/styles-overlay.css'
 
 const RESULTS_WIDTH_KEY = 'ocr-deployer:resultsWidth'
-const RESULTS_WIDTH_DEFAULT = 560
-const RESULTS_WIDTH_MIN = 360
-const RESULTS_WIDTH_MAX = 1100
+const RESULTS_WIDTH_DEFAULT = 420
+const RESULTS_WIDTH_MIN = 340
+const RESULTS_WIDTH_MAX = 760
 
 function readStoredWidth(): number {
 	if (typeof window === 'undefined') return RESULTS_WIDTH_DEFAULT
@@ -111,46 +111,49 @@ export function OCRPage() {
 	}
 
 	return (
-		<div className='flex h-screen flex-col overflow-hidden bg-zinc-50'>
-			<AppHeader uploadFile={uploadFile} result={parsedResult} />
+		<div className='ocr-app-shell flex h-screen flex-col overflow-hidden p-3'>
+			<div className='ocr-window flex min-h-0 flex-1 flex-col overflow-hidden'>
+				<AppHeader uploadFile={uploadFile} result={parsedResult} />
 
-			<div className='flex min-h-0 flex-1 overflow-hidden'>
-				<aside className='flex w-60 shrink-0 flex-col overflow-hidden border-r border-border bg-white'>
-					<FileUpload
-						currentLocalId={currentLocalId}
-						onActiveTaskChange={localId => {
-							setCurrentLocalId(localId)
-						}}
-						onFileReady={handleFileReady}
-					/>
-					<HistoryPanel
-						currentLocalId={currentLocalId}
-						onSelect={record => setCurrentLocalId(record.localId)}
-					/>
-				</aside>
+				<div className='flex min-h-0 flex-1 gap-3 overflow-hidden p-3 pt-0'>
+					<aside className='ocr-glass-panel flex w-[286px] shrink-0 flex-col overflow-hidden'>
+						<FileUpload
+							currentLocalId={currentLocalId}
+							onActiveTaskChange={localId => {
+								setCurrentLocalId(localId)
+							}}
+							onFileReady={handleFileReady}
+						/>
+						<HistoryPanel
+							currentLocalId={currentLocalId}
+							onSelect={record => setCurrentLocalId(record.localId)}
+						/>
+					</aside>
 
-				<main className='flex min-w-0 flex-1 overflow-hidden'>
-					<section className='flex min-w-0 flex-1 flex-col overflow-hidden bg-white'>
-						<FilePreview file={uploadFile} result={parsedResult} />
-					</section>
+					<main className='flex min-w-0 flex-1 overflow-hidden'>
+						<section className='ocr-glass-panel flex min-w-0 flex-1 flex-col overflow-hidden'>
+							<FilePreview file={uploadFile} result={parsedResult} />
+						</section>
 
-					<ResizableDivider
-						value={resultsWidth}
-						onChange={setResultsWidth}
-						onCommit={persistResultsWidth}
-						onReset={resetResultsWidth}
-						min={RESULTS_WIDTH_MIN}
-						max={RESULTS_WIDTH_MAX}
-						direction='right'
-						ariaLabel='调整结果区宽度'
-					/>
+						<ResizableDivider
+							value={resultsWidth}
+							onChange={setResultsWidth}
+							onCommit={persistResultsWidth}
+							onReset={resetResultsWidth}
+							min={RESULTS_WIDTH_MIN}
+							max={RESULTS_WIDTH_MAX}
+							direction='right'
+							ariaLabel='调整结果区宽度'
+							className='mx-1'
+						/>
 
-					<section
-						className='flex shrink-0 flex-col overflow-hidden border-l border-border bg-white'
-						style={{ width: `${resultsWidth}px` }}>
-						<OCRResults result={parsedResult} fileName={uploadFile?.name} />
-					</section>
-				</main>
+						<section
+							className='ocr-glass-panel flex shrink-0 flex-col overflow-hidden'
+							style={{ width: `${resultsWidth}px` }}>
+							<OCRResults result={parsedResult} fileName={uploadFile?.name} />
+						</section>
+					</main>
+				</div>
 			</div>
 		</div>
 	)

@@ -10,6 +10,7 @@ import {
 import {
 	Check,
 	ChevronDown,
+	Download,
 	FileArchive,
 	Loader2,
 	Search,
@@ -21,6 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/libs/utils'
 import {
 	exportTaskFormulas,
+	renderFormula,
 	renderFormulaText,
 	type FormulaFormat,
 	type FormulaItem
@@ -93,6 +95,12 @@ const EXPORT_PRESETS: ExportPreset[] = [
 	}
 ]
 
+const DOWNLOAD_FORMATS: { format: FormulaFormat; label: string; ext: string; type: string }[] = [
+	{ format: 'latex', label: 'TEX', ext: 'tex', type: 'text/x-tex;charset=utf-8' },
+	{ format: 'mathml', label: 'MML', ext: 'mml', type: 'application/mathml+xml' },
+	{ format: 'png', label: 'PNG', ext: 'png', type: 'image/png' }
+]
+
 function saveBlob(blob: Blob, filename: string) {
 	const url = URL.createObjectURL(blob)
 	const a = document.createElement('a')
@@ -115,7 +123,7 @@ function FormulaPreview({ latex }: { latex: string }) {
 	)
 	return (
 		<div
-			className='overflow-auto rounded-md border border-zinc-200 bg-white px-3 py-3 text-zinc-900'
+			className='ocr-formula-preview overflow-auto rounded-2xl border border-white/80 px-4 py-4 text-zinc-900 shadow-inner'
 			dangerouslySetInnerHTML={{ __html: markup }}
 		/>
 	)
@@ -168,6 +176,7 @@ function ExportMenu({ taskId, disabled }: ExportMenuProps) {
 			<Button
 				variant='outline'
 				size='sm'
+				className='h-8 gap-1.5 rounded-full border-white/80 bg-white/80 px-3 text-[12px] font-semibold text-slate-700 shadow-sm hover:bg-white'
 				disabled={disabled || !taskId}
 				onClick={() => setOpen(value => !value)}
 				aria-haspopup='menu'
@@ -184,7 +193,7 @@ function ExportMenu({ taskId, disabled }: ExportMenuProps) {
 			{open && (
 				<div
 					role='menu'
-					className='absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-lg border border-border bg-white shadow-lg motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150 origin-top-right'>
+					className='absolute right-0 z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-white/70 bg-white/95 p-1 shadow-2xl shadow-slate-900/10 backdrop-blur-xl motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150'>
 					{EXPORT_PRESETS.map(preset => {
 						const isBusy = busyKey === preset.key
 						return (
@@ -194,7 +203,7 @@ function ExportMenu({ taskId, disabled }: ExportMenuProps) {
 								role='menuitem'
 								disabled={busyKey !== null}
 								onClick={() => void runExport(preset)}
-								className='flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-zinc-700 transition-colors duration-150 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60'>
+								className='flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition-colors duration-150 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60'>
 								<span className='flex items-center gap-2'>
 									{isBusy && <Loader2 className='size-3.5 animate-spin text-primary' />}
 									<span className={cn(isBusy && 'text-muted-foreground')}>
@@ -218,7 +227,9 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 	const listRef = useRef<HTMLDivElement>(null)
 	const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 	const [copyBusy, setCopyBusy] = useState<string | null>(null)
+	const [downloadBusy, setDownloadBusy] = useState<string | null>(null)
 	const [copiedKey, setCopiedKey] = useState<string | null>(null)
+	const [downloadedKey, setDownloadedKey] = useState<string | null>(null)
 	const [query, setQuery] = useState('')
 	const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
@@ -317,6 +328,31 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 		[]
 	)
 
+	const downloadFormula = useCallback(async (formula: FormulaItem, format: FormulaFormat) => {
+		const config = DOWNLOAD_FORMATS.find(item => item.format === format)
+		if (!config) return
+		const cardKey = formula.formula_id || `${formula.page_index}-${formula.block_id ?? 'formula'}`
+		const busyKey = `${cardKey}|${format}`
+		setDownloadBusy(busyKey)
+		try {
+			const blob =
+				format === 'latex'
+					? new Blob([formula.latex], { type: config.type })
+					: await renderFormula(formula.latex, format)
+			saveBlob(blob, `${cardKey}.${config.ext}`)
+			toast.success(`${config.label} 已开始下载`)
+			setDownloadedKey(busyKey)
+			window.setTimeout(() => {
+				setDownloadedKey(prev => (prev === busyKey ? null : prev))
+			}, 1200)
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			toast.error(`下载失败：${message}`)
+		} finally {
+			setDownloadBusy(null)
+		}
+	}, [])
+
 	const handleKeyDown: React.KeyboardEventHandler<HTMLDivElement> = event => {
 		if (!filtered.length) return
 		if (
@@ -360,10 +396,10 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 
 	if (!formulas.length) {
 		return (
-			<div className='flex h-full items-center justify-center bg-zinc-50'>
-				<div className='rounded-lg p-4 text-center text-sm text-muted-foreground'>
-					<Sigma className='mx-auto mb-2 size-6 text-muted-foreground/60' />
-					<p>暂无公式</p>
+			<div className='flex h-full items-center justify-center bg-[linear-gradient(180deg,rgba(255,255,255,0.66),rgba(248,250,252,0.72))]'>
+				<div className='rounded-3xl border border-dashed border-slate-300/80 bg-white/60 p-6 text-center text-sm text-slate-500'>
+					<Sigma className='mx-auto mb-2 size-7 text-violet-400' />
+					<p className='font-medium'>暂无公式</p>
 				</div>
 			</div>
 		)
@@ -374,47 +410,54 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 			ref={listRef}
 			tabIndex={0}
 			onKeyDown={handleKeyDown}
-			className='flex h-full flex-col overflow-hidden bg-zinc-50 outline-none'>
-			<div className='sticky top-0 z-10 flex flex-col gap-2 border-b border-border bg-white/95 px-4 py-3 backdrop-blur-sm'>
+			className='flex h-full flex-col overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.64),rgba(248,250,252,0.72))] outline-none'>
+			<div className='ocr-panel-toolbar sticky top-0 z-10 flex flex-col gap-2 px-4 py-3'>
 				<div className='flex items-center justify-between gap-3'>
-					<div className='flex items-center gap-2 text-sm font-medium text-foreground'>
-						<Sigma className='size-4' />
-						<span>
-							{filtered.length}
-							<span className='text-muted-foreground'> / {formulas.length}</span>
-							<span className='ml-1 text-muted-foreground'>个公式</span>
+					<div className='flex items-center gap-2 text-sm font-semibold text-slate-950'>
+						<span className='flex size-8 items-center justify-center rounded-2xl bg-violet-100 text-violet-600'>
+							<Sigma className='size-4' />
 						</span>
+						<div>
+							<p>
+								{filtered.length}
+								<span className='text-slate-400'> / {formulas.length}</span>
+								<span className='ml-1 text-slate-500'>个公式</span>
+							</p>
+							<p className='mt-0.5 text-[10px] font-medium text-slate-500'>
+								支持 LaTeX / MathML / PNG 导出
+							</p>
+						</div>
 					</div>
 					<ExportMenu taskId={taskId} />
 				</div>
 				<div className='relative'>
-					<Search className='pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground' />
+					<Search className='pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400' />
 					<input
 						type='text'
 						value={query}
 						placeholder='搜索 LaTeX 或 ID'
 						onChange={event => setQuery(event.target.value)}
-						className='h-8 w-full rounded-full border border-border bg-white pl-8 pr-8 text-[12px] text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground focus-visible:border-primary/60'
+						className='h-9 w-full rounded-full border border-white/80 bg-white/80 pl-9 pr-8 text-[12px] text-slate-900 shadow-inner outline-none transition-colors duration-150 placeholder:text-slate-400 focus-visible:border-blue-400'
 					/>
 					{query && (
 						<button
 							type='button'
 							aria-label='清空搜索'
 							onClick={() => setQuery('')}
-							className='absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-zinc-100 hover:text-foreground'>
+							className='absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-900'>
 							<X className='size-3' />
 						</button>
 					)}
 				</div>
 			</div>
 
-			<div className='flex-1 overflow-auto'>
+			<div className='ocr-scrollbar flex-1 overflow-auto'>
 				{filtered.length === 0 ? (
-					<div className='flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground'>
+					<div className='flex h-full items-center justify-center px-6 text-center text-sm text-slate-500'>
 						<p>没有匹配 "{query}" 的公式</p>
 					</div>
 				) : (
-					<div className='divide-y divide-zinc-200'>
+					<div className='space-y-3 p-4'>
 						{filtered.map((formula, index) => {
 							const cardKey = keyFor(formula, index)
 							const isSelected = selectedKey === cardKey
@@ -427,10 +470,10 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 									}}
 									data-selected={isSelected || undefined}
 									className={cn(
-										'group relative px-4 py-4 transition-colors duration-150 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-200',
+										'ocr-card-enter group relative rounded-3xl border px-4 py-4 transition-[background-color,border-color,box-shadow,transform] duration-200',
 										isSelected
-											? 'bg-primary/5 ring-1 ring-inset ring-primary/40'
-											: 'bg-white hover:bg-zinc-50'
+											? 'border-violet-300 bg-white/90 shadow-xl shadow-violet-500/10 ring-1 ring-violet-300/50'
+											: 'border-white/70 bg-white/70 shadow-sm hover:-translate-y-0.5 hover:border-blue-200 hover:bg-white/90 hover:shadow-lg'
 									)}
 									onMouseEnter={() => {
 										activateFormula(formula)
@@ -445,10 +488,10 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 										<div className='flex items-center gap-2'>
 											<Badge
 												variant='outline'
-												className='h-5 rounded-full px-2 text-[10px]'>
+												className='h-5 rounded-full border-violet-200 bg-violet-50 px-2 text-[10px] font-semibold text-violet-700'>
 												P{formula.page_index}
 											</Badge>
-											<span className='font-mono text-[11px] text-muted-foreground'>
+											<span className='max-w-[9rem] truncate font-mono text-[11px] text-slate-500'>
 												{formula.formula_id}
 											</span>
 										</div>
@@ -469,7 +512,7 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 															event.stopPropagation()
 															void copyFormula(formula, format)
 														}}
-														className='h-7 gap-1 px-2.5 text-[11.5px]'>
+														className='h-7 gap-1 rounded-full px-2.5 text-[11.5px]'>
 														{justCopied ? (
 															<Check className='size-3.5' />
 														) : isBusy ? (
@@ -482,6 +525,35 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 										</div>
 									</div>
 									<FormulaPreview latex={formula.latex} />
+									<div className='mt-3 flex flex-wrap items-center justify-end gap-1.5'>
+										{DOWNLOAD_FORMATS.map(item => {
+											const busyKey = `${formula.formula_id || `${formula.page_index}-${formula.block_id ?? 'formula'}`}|${item.format}`
+											const isBusy = downloadBusy === busyKey
+											const justDownloaded = downloadedKey === busyKey
+											return (
+												<Button
+													key={item.format}
+													variant='outline'
+													size='sm'
+													disabled={isBusy}
+													aria-label={`下载 ${item.label}`}
+													onClick={event => {
+														event.stopPropagation()
+														void downloadFormula(formula, item.format)
+													}}
+													className='h-7 gap-1 rounded-full border-white/80 bg-white/80 px-2.5 text-[11px] font-semibold text-slate-600 shadow-sm hover:bg-white'>
+													{justDownloaded ? (
+														<Check className='size-3.5 text-emerald-600' />
+													) : isBusy ? (
+														<Loader2 className='size-3.5 animate-spin' />
+													) : (
+														<Download className='size-3.5' />
+													)}
+													{item.label}
+												</Button>
+											)
+										})}
+									</div>
 								</div>
 							)
 						})}

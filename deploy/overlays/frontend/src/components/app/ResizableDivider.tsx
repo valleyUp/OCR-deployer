@@ -111,15 +111,15 @@ export function ResizableDivider({
 			onKeyDown={handleKeyDown}
 			onDoubleClick={handleDoubleClick}
 			className={cn(
-				'group relative flex w-1.5 shrink-0 cursor-col-resize items-center justify-center outline-none',
+				'group relative flex w-3 shrink-0 cursor-col-resize items-center justify-center outline-none',
 				className
 			)}>
 			<span
-				className='absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors duration-150 group-hover:bg-primary/40 group-active:bg-primary/70 group-focus-visible:bg-primary/70'
+				className='absolute inset-y-4 left-1/2 w-px -translate-x-1/2 rounded-full bg-white/70 shadow-[0_0_0_1px_rgba(148,163,184,0.22)] transition-colors duration-150 group-hover:bg-blue-300 group-active:bg-blue-500 group-focus-visible:bg-blue-500'
 			/>
 			<span
 				aria-hidden='true'
-				className='absolute top-1/2 left-1/2 h-8 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-border/0 transition-colors duration-150 group-hover:bg-primary/60 group-active:bg-primary/80'
+				className='absolute top-1/2 left-1/2 h-10 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-300/0 transition-colors duration-150 group-hover:bg-blue-500/50 group-active:bg-blue-600/70'
 			/>
 		</div>
 	)

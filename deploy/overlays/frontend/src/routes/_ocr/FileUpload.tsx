@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
 	Check,
+	ClipboardPaste,
 	Clock,
+	FileStack,
 	FileText,
+	ImageUp,
 	Loader2,
 	Sigma,
+	Sparkles,
 	UploadCloud
 } from 'lucide-react'
 import { cn } from '@/libs/utils'
@@ -369,84 +373,110 @@ export function FileUpload({
 	).length
 
 	return (
-		<div className='flex shrink-0 flex-col bg-white'>
+		<div className='flex shrink-0 flex-col'>
 			<div className='flex flex-col gap-4 p-4'>
-				<div>
-					<h2 className='text-[15px] font-semibold tracking-tight text-foreground'>
-						文件上传
-					</h2>
-					<p className='mt-0.5 text-[11px] text-muted-foreground'>
-						拖拽、点击或粘贴；支持多选
-					</p>
+				<div className='flex items-start justify-between gap-3'>
+					<div>
+						<h2 className='text-[15px] font-semibold tracking-tight text-slate-950'>
+							新建任务
+						</h2>
+						<p className='mt-0.5 text-[11px] text-slate-500'>
+							上传文件或粘贴剪贴板图片
+						</p>
+					</div>
+					<span className='ocr-pill h-7 px-2.5 text-[11px] font-medium text-slate-500'>
+						<FileStack className='size-3.5 text-blue-500' />
+						{historyRecords.length}
+					</span>
 				</div>
 
-				<div className='rounded-lg bg-zinc-100 p-1'>
-					<div className='grid grid-cols-2 gap-1 text-sm'>
-						{MODE_OPTIONS.map(option => {
-							const active = processingMode === option.id
-							const Icon = option.icon
-							return (
-								<button
-									key={option.id}
-									type='button'
-									aria-pressed={active}
-									onClick={() => setProcessingMode(option.id)}
-									className={cn(
-										'flex flex-col items-center gap-0.5 rounded-md px-2 py-1.5 transition-[background-color,color,box-shadow] duration-200',
-										active
-											? 'bg-white text-foreground shadow-sm ring-1 ring-border'
-											: 'text-muted-foreground hover:text-foreground'
-									)}>
-									<span className='flex items-center gap-1.5 text-[13px] font-medium'>
-										<Icon className='size-4' />
-										{option.label}
-									</span>
-									<span className='text-[10px] text-muted-foreground/80'>
-										{option.hint}
-									</span>
-								</button>
-							)
-						})}
-					</div>
+				<div className='ocr-segment'>
+					{MODE_OPTIONS.map(option => {
+						const active = processingMode === option.id
+						const Icon = option.icon
+						return (
+							<button
+								key={option.id}
+								type='button'
+								aria-pressed={active}
+								onClick={() => setProcessingMode(option.id)}
+								className={cn(
+									'flex min-h-16 flex-col items-center justify-center gap-1 rounded-full px-2.5 text-center transition-[background-color,color,box-shadow,transform] duration-200',
+									active
+										? 'bg-white text-slate-950 shadow-sm ring-1 ring-white/90'
+										: 'text-slate-500 hover:text-slate-900'
+								)}>
+								<span className='flex items-center gap-1.5 text-[13px] font-semibold'>
+									<Icon
+										className={cn(
+											'size-4',
+											active && option.id === 'formula' && 'text-violet-500',
+											active && option.id === 'pipeline' && 'text-blue-500'
+										)}
+									/>
+									{option.label}
+								</span>
+								<span className='text-[10px] font-medium text-slate-500'>
+									{option.hint}
+								</span>
+							</button>
+						)
+					})}
 				</div>
 
 				<div
 					className={cn(
-						'relative cursor-pointer rounded-xl border-2 border-dashed px-4 py-7 text-center transition-[background-color,border-color,transform] duration-200',
-						isDragging
-							? 'scale-[1.01] border-primary bg-primary/5'
-							: 'border-zinc-300 hover:border-primary/50 hover:bg-zinc-50'
+						'ocr-drop-zone cursor-pointer rounded-[22px] px-4 py-6 text-center',
+						processingMode === 'formula' && 'ocr-active-glow'
 					)}
+					data-active={isDragging ? 'true' : 'false'}
 					onDragOver={handleDragOver}
 					onDragLeave={handleDragLeave}
 					onDrop={handleDrop}
 					onClick={() => fileInputRef.current?.click()}>
-					<div className='flex flex-col items-center gap-2'>
+					<div className='relative flex flex-col items-center gap-3'>
 						<span
 							className={cn(
-								'flex size-11 items-center justify-center rounded-full transition-colors duration-200',
+								'flex size-14 items-center justify-center rounded-2xl transition-colors duration-200',
 								isDragging
-									? 'bg-primary/10 text-primary'
-									: 'bg-zinc-100 text-zinc-500'
+									? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+									: processingMode === 'formula'
+										? 'bg-violet-100 text-violet-600'
+										: 'bg-blue-100 text-blue-600'
 							)}>
 							<UploadCloud
 								className={cn(
-									'size-5',
+									'size-6',
 									isDragging && 'motion-safe:animate-bounce'
 								)}
 							/>
 						</span>
-						<p className='text-[13px] font-medium text-foreground'>
-							{isDragging ? '松手上传文件' : '点击或拖拽到此处'}
-						</p>
-						<p className='flex items-center justify-center gap-1 text-[11px] text-muted-foreground'>
+						<div className='space-y-1'>
+							<p className='text-[14px] font-semibold text-slate-950'>
+								{isDragging ? '松手上传文件' : '点击或拖拽到此处'}
+							</p>
+							<p className='text-[11px] text-slate-500'>
+								{processingMode === 'formula'
+									? '公式任务会优先筛选 equation 结果'
+									: '文档任务保留版面、文本与图片块'}
+							</p>
+						</div>
+						<div className='flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-medium text-slate-500'>
+							<span className='ocr-pill px-2 py-1'>
+								<ImageUp className='size-3 text-cyan-500' />
+								PNG/JPG/PDF
+							</span>
+							<span className='ocr-pill px-2 py-1'>
+								<Sparkles className='size-3 text-violet-500' />
+								最大 {maxUploadMb} MB
+							</span>
+						</div>
+						<p className='flex items-center justify-center gap-1 text-[11px] text-slate-500'>
+							<ClipboardPaste className='size-3.5 text-slate-400' />
 							或按 <kbd>⌘</kbd>
-							<span className='text-muted-foreground/70'>/</span>
+							<span className='text-slate-400'>/</span>
 							<kbd>Ctrl</kbd>
 							<kbd>V</kbd> 粘贴图片
-						</p>
-						<p className='text-[10.5px] text-muted-foreground/80'>
-							PNG · JPG · PDF · 最大 {maxUploadMb} MB · 支持多选
 						</p>
 					</div>
 				</div>
@@ -461,20 +491,31 @@ export function FileUpload({
 				/>
 
 				{pendingCount > 0 && (
-					<p className='text-[11px] text-muted-foreground'>
-						{pendingCount} 个任务处理中
-						<Loader2 className='ml-1 inline size-3 animate-spin align-[-2px]' />
-					</p>
+					<div className='flex items-center justify-between rounded-full border border-blue-200/70 bg-blue-50/80 px-3 py-2 text-[11px] font-medium text-blue-700'>
+						<span>{pendingCount} 个任务处理中</span>
+						<Loader2 className='size-3.5 animate-spin' />
+					</div>
 				)}
 			</div>
 
 			{showTimeline && activeRecord && (
-				<div className='mx-4 mb-4 rounded-lg border border-border bg-zinc-50/80 p-3'>
-					<div className='mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
-						<Clock className='size-3.5' />
-						{activeRecord.currentStage || '排队中'}
+				<div className='ocr-card-enter ocr-scan-card mx-4 mb-4 rounded-2xl border border-white/70 bg-white/70 p-3 shadow-sm'>
+					<div className='mb-3 flex items-center justify-between gap-2'>
+						<div className='flex min-w-0 items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500'>
+							<Clock className='size-3.5 text-blue-500' />
+							<span className='truncate'>{activeRecord.currentStage || '排队中'}</span>
+						</div>
+						<span className='rounded-full bg-slate-950/5 px-2 py-0.5 text-[10px] font-semibold text-slate-500'>
+							{Math.round(activeRecord.progress ?? 0)}%
+						</span>
 					</div>
-					<ol className='space-y-2'>
+					<div className='mb-3 h-1.5 overflow-hidden rounded-full bg-slate-200/80'>
+						<div
+							className='h-full rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-400 transition-[width] duration-500'
+							style={{ width: `${Math.max(4, activeRecord.progress ?? stageIndex * 28)}%` }}
+						/>
+					</div>
+					<ol className='space-y-2.5'>
 						{STAGE_STEPS.map((step, index) => {
 							const state =
 								index < stageIndex
@@ -486,11 +527,11 @@ export function FileUpload({
 								<li key={step.id} className='flex items-center gap-2'>
 									<span
 										className={cn(
-											'flex size-4 items-center justify-center rounded-full transition-colors duration-200',
-											state === 'done' && 'bg-primary text-primary-foreground',
+											'flex size-5 items-center justify-center rounded-full transition-colors duration-200',
+											state === 'done' && 'bg-emerald-500 text-white',
 											state === 'active' &&
-												'bg-primary text-primary-foreground motion-safe:animate-pulse',
-											state === 'idle' && 'bg-zinc-200 text-muted-foreground'
+												'bg-blue-600 text-white shadow-lg shadow-blue-500/20 motion-safe:animate-pulse',
+											state === 'idle' && 'bg-slate-200 text-slate-500'
 										)}>
 										{state === 'done' ? (
 											<Check className='size-2.5' />
@@ -500,8 +541,8 @@ export function FileUpload({
 									</span>
 									<span
 										className={cn(
-											'text-[12px]',
-											state === 'idle' ? 'text-muted-foreground' : 'text-foreground'
+											'text-[12px] font-medium',
+											state === 'idle' ? 'text-slate-500' : 'text-slate-900'
 										)}>
 										{step.label}
 									</span>

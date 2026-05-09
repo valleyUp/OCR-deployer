@@ -47,11 +47,11 @@ const MODE_LABEL: Record<HistoryRecord['processingMode'], string> = {
 function StatusBadge({ status }: { status: HistoryRecord['status'] }) {
 	const isActive = status === 'processing' || status === 'pending'
 	const tone: Record<HistoryRecord['status'], string> = {
-		pending: 'bg-zinc-100 text-zinc-600',
-		processing: 'bg-amber-50 text-amber-700',
+		pending: 'bg-slate-100 text-slate-600',
+		processing: 'bg-blue-50 text-blue-700',
 		completed: 'bg-emerald-50 text-emerald-700',
 		failed: 'bg-red-50 text-red-700',
-		cancelled: 'bg-zinc-100 text-zinc-500'
+		cancelled: 'bg-slate-100 text-slate-500'
 	}
 	const Icon =
 		status === 'completed'
@@ -64,7 +64,7 @@ function StatusBadge({ status }: { status: HistoryRecord['status'] }) {
 	return (
 		<span
 			className={cn(
-				'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+				'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
 				tone[status]
 			)}>
 			<Icon
@@ -113,6 +113,7 @@ function HistoryItem({
 	const progressValue = Math.max(0, Math.min(100, record.progress ?? 0))
 	const clickable = record.status === 'completed' || record.resultStripped
 	const icon = record.processingMode === 'formula' ? Sigma : FileText
+	const Icon = icon
 
 	return (
 		<div
@@ -129,31 +130,34 @@ function HistoryItem({
 				}
 			}}
 			aria-disabled={!clickable}
+			data-active={active ? 'true' : 'false'}
 			className={cn(
-				'group relative block border-b border-zinc-100 px-3 py-2.5 text-left transition-colors duration-150',
-				clickable && 'cursor-pointer hover:bg-zinc-50',
-				active && 'bg-primary/5 ring-1 ring-inset ring-primary/40',
+				'ocr-history-item group relative mx-3 mb-2 block rounded-2xl px-3 py-3 text-left',
+				clickable && 'cursor-pointer',
 				!clickable && 'cursor-default opacity-70'
 			)}>
 			<div className='flex items-start gap-2'>
-				<span className='mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-zinc-500'>
-					{(() => {
-						const Icon = icon
-						return <Icon className='size-3.5' />
-					})()}
+				<span
+					className={cn(
+						'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl',
+						record.processingMode === 'formula'
+							? 'bg-violet-100 text-violet-600'
+							: 'bg-blue-100 text-blue-600'
+					)}>
+					<Icon className='size-4' />
 				</span>
 				<div className='min-w-0 flex-1'>
 					<div className='flex items-center gap-1.5'>
-						<p className='truncate text-[12px] font-medium text-foreground'>
+						<p className='truncate text-[12px] font-semibold text-slate-950'>
 							{record.fileName}
 						</p>
 						<Badge
 							variant='outline'
-							className='h-4 shrink-0 rounded-full px-1.5 text-[9px] font-normal'>
+							className='h-4 shrink-0 rounded-full border-white/70 bg-white/70 px-1.5 text-[9px] font-medium text-slate-500'>
 							{MODE_LABEL[record.processingMode]}
 						</Badge>
 					</div>
-					<div className='mt-0.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-muted-foreground'>
+					<div className='mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-slate-500'>
 						<StatusBadge status={record.status} />
 						<span>{formatFileSize(record.fileSize)}</span>
 						<span>·</span>
@@ -166,15 +170,15 @@ function HistoryItem({
 						</span>
 					</div>
 					{record.status === 'processing' && (
-						<div className='mt-1.5'>
-							<div className='h-1 overflow-hidden rounded-full bg-zinc-100'>
+						<div className='mt-2'>
+							<div className='h-1.5 overflow-hidden rounded-full bg-slate-200/80'>
 								<div
-									className='h-full bg-primary transition-[width] duration-300 ease-out'
+									className='h-full rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-400 transition-[width] duration-300 ease-out'
 									style={{ width: `${progressValue}%` }}
 								/>
 							</div>
 							{record.currentStage && (
-								<p className='mt-0.5 text-[10px] text-muted-foreground'>
+								<p className='mt-1 truncate text-[10px] text-slate-500'>
 									{record.currentStage}
 								</p>
 							)}
@@ -192,7 +196,7 @@ function HistoryItem({
 								onClick={handleCopyTaskId}
 								aria-label='复制任务 ID'
 								className={cn(
-									'inline-flex items-center gap-1 rounded-md px-1 py-0.5 font-mono text-[9.5px] text-muted-foreground transition-colors hover:bg-zinc-100 hover:text-foreground'
+									'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-mono text-[9.5px] text-slate-500 transition-colors hover:bg-white hover:text-slate-900'
 								)}>
 								{idCopied ? (
 									<Check className='size-2.5' />
@@ -206,7 +210,7 @@ function HistoryItem({
 							type='button'
 							onClick={handleDelete}
 							aria-label='删除记录'
-							className='ml-auto inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 opacity-0 group-hover:opacity-100 focus-visible:opacity-100'>
+							className='ml-auto inline-flex size-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition-colors hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 focus-visible:opacity-100'>
 							<Trash2 className='size-3' />
 						</button>
 					</div>
@@ -247,14 +251,14 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 	}
 
 	return (
-		<div className='flex min-h-0 flex-1 flex-col border-t border-border bg-white'>
-			<div className='flex items-center justify-between gap-2 border-b border-border px-3 py-2'>
-				<div className='flex flex-1 items-center gap-1.5 text-[12px] font-semibold tracking-tight text-foreground/90'>
-					<History className='size-3.5 text-muted-foreground' />
+		<div className='flex min-h-0 flex-1 flex-col border-t border-white/70'>
+			<div className='ocr-panel-toolbar flex items-center justify-between gap-2 px-4 py-3'>
+				<div className='flex flex-1 items-center gap-1.5 text-[12px] font-semibold tracking-tight text-slate-900'>
+					<History className='size-3.5 text-slate-500' />
 					历史记录
 					<Badge
 						variant='outline'
-						className='h-4 rounded-full px-1.5 text-[10px] font-normal'>
+						className='h-4 rounded-full border-white/70 bg-white/70 px-1.5 text-[10px] font-medium text-slate-500'>
 						{records.length}
 					</Badge>
 				</div>
@@ -263,17 +267,20 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 						variant='ghost'
 						size='icon-sm'
 						aria-label='清空历史'
-						className='text-muted-foreground hover:text-red-600'
+						className='ocr-icon-button size-8 text-slate-400 hover:text-red-600'
 						onClick={() => setConfirmClear(true)}>
 						<Trash2 className='size-3.5' />
 					</Button>
 				)}
 			</div>
 
-			<div className='flex-1 overflow-auto'>
+			<div className='ocr-scrollbar flex-1 overflow-auto py-3'>
 				{records.length === 0 ? (
-					<div className='flex h-full min-h-[6rem] items-center justify-center px-4 py-6 text-center text-[11px] text-muted-foreground'>
-						还没有识别任务
+					<div className='mx-4 flex h-full min-h-[8rem] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white/50 px-4 py-6 text-center'>
+						<span className='mb-2 flex size-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-400'>
+							<History className='size-5' />
+						</span>
+						<p className='text-[12px] font-medium text-slate-600'>还没有识别任务</p>
 					</div>
 				) : (
 					records.map(record => (

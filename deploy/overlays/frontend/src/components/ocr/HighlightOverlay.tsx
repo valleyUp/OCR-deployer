@@ -28,10 +28,10 @@ export function HighlightOverlay({
 		<div
 			data-state={state}
 			className={cn(
-				'pointer-events-none absolute z-10 rounded-sm border transition-[background-color,border-color,box-shadow,transform] duration-150 ease-out',
+				'pointer-events-none absolute z-10 rounded-[10px] border transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out',
 				state === 'click'
-					? 'border-amber-500/90 bg-amber-300/35 shadow-[0_0_0_2px_rgba(245,158,11,0.18)]'
-					: 'border-amber-400/70 bg-amber-300/20'
+					? 'border-blue-500/90 bg-blue-400/20 shadow-[0_0_0_2px_rgba(37,99,235,0.16),0_0_34px_rgba(37,99,235,0.24)]'
+					: 'border-cyan-400/75 bg-cyan-300/20 shadow-[0_0_20px_rgba(6,182,212,0.14)]'
 			)}
 			style={{
 				left: `${style.left}px`,
@@ -42,7 +42,7 @@ export function HighlightOverlay({
 			{state === 'click' && (
 				<span
 					aria-hidden='true'
-					className='pointer-events-none absolute inset-0 rounded-sm ring-2 ring-amber-400/40 motion-safe:animate-ping motion-safe:[animation-iteration-count:1] motion-safe:[animation-duration:800ms]'
+					className='pointer-events-none absolute inset-0 rounded-[10px] ring-2 ring-blue-400/40 motion-safe:animate-ping motion-safe:[animation-iteration-count:1] motion-safe:[animation-duration:800ms]'
 				/>
 			)}
 			{showCopyButton && (

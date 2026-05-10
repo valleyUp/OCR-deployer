@@ -378,17 +378,17 @@ export function FileUpload({
 			<div className='flex flex-col gap-4 p-5'>
 				{/* Heading */}
 				<div>
-					<h2 className='text-[20px] font-semibold tracking-tight text-[#0d0d12]'>
+					<h2 className='font-[family-name:var(--font-display)] text-[20px] font-semibold tracking-tight text-[#1A1A1A]'>
 						新建任务
 					</h2>
-					<p className='mt-0.5 text-[12px] text-[#8e8e96]'>
+					<p className='mt-0.5 text-[12px] text-[#999]'>
 						拖拽文件、点击或粘贴
 					</p>
 				</div>
 
 				{/* Segmented control — sliding pill with spring physics */}
-				<div className='ios-segment'>
-					<div className='ios-segment-thumb' style={segmentThumbStyle} />
+				<div className='segment-control'>
+					<div className='segment-thumb' style={segmentThumbStyle} />
 					{MODE_OPTIONS.map(option => {
 						const active = processingMode === option.id
 						const Icon = option.icon
@@ -398,16 +398,16 @@ export function FileUpload({
 								type='button'
 								aria-pressed={active}
 								onClick={() => setProcessingMode(option.id)}
-								className='ios-segment-btn'>
+								className='segment-btn'>
 								<Icon
 									className={cn(
-										'size-4 transition-colors duration-260',
+										'size-4 transition-colors duration-300',
 										active && option.id === 'formula' && 'text-violet-500',
-										active && option.id === 'pipeline' && 'text-blue-500'
+										active && option.id === 'pipeline' && 'text-indigo-500'
 									)}
 								/>
 								<span>{option.label}</span>
-								<span className='ios-segment-hint'>{option.hint}</span>
+								<span className='segment-hint'>{option.hint}</span>
 							</button>
 						)
 					})}
@@ -416,34 +416,34 @@ export function FileUpload({
 				{/* Drop zone */}
 				<div
 					className={cn(
-						'ios-drop',
+						'drop-zone',
 						isDragging && 'is-drag'
 					)}
 					onDragOver={handleDragOver}
 					onDragLeave={handleDragLeave}
 					onDrop={handleDrop}
 					onClick={() => fileInputRef.current?.click()}>
-					<div className='ios-drop-icon'>
+					<div className='drop-zone-icon'>
 						<UploadCloud
 							className={cn(
-								'size-6 transition-transform duration-320',
+								'size-6 transition-transform duration-300',
 								isDragging && 'motion-safe:animate-bounce'
 							)}
 						/>
 					</div>
-					<p className='text-[15px] font-medium text-[#0d0d12]'>
+					<p className='text-[15px] font-medium text-[#1A1A1A]'>
 						{isDragging ? '松手上传' : '拖拽或点击上传'}
 					</p>
-					<p className='mt-1 text-[12px] text-[#8e8e96]'>
+					<p className='mt-1 text-[12px] text-[#999]'>
 						{processingMode === 'formula'
 							? '识别公式，输出 LaTeX / MathML'
 							: '版面还原，输出 Markdown + bbox'}
 					</p>
-					<div className='mt-3 flex flex-wrap items-center justify-center gap-3 text-[11px] text-[#8e8e96]'>
-						<span className='ios-pill px-2.5 py-0.5 text-[11px]'>PNG · JPG · PDF</span>
-						<span className='ios-pill px-2.5 py-0.5 text-[11px]'>最大 {maxUploadMb} MB</span>
+					<div className='mt-3 flex flex-wrap items-center justify-center gap-3 text-[11px] text-[#999]'>
+						<span className='pill px-2.5 py-0.5 text-[11px]'>PNG · JPG · PDF</span>
+						<span className='pill px-2.5 py-0.5 text-[11px]'>最大 {maxUploadMb} MB</span>
 					</div>
-					<p className='mt-3 flex items-center justify-center gap-1 text-[11px] text-[#8e8e96]'>
+					<p className='mt-3 flex items-center justify-center gap-1 text-[11px] text-[#999]'>
 						<kbd>⌘</kbd>
 						<span>/</span>
 						<kbd>Ctrl</kbd>
@@ -462,7 +462,7 @@ export function FileUpload({
 				/>
 
 				{pendingCount > 0 && (
-					<div className='flex items-center justify-between rounded-full border border-[rgba(0,113,227,0.18)] bg-[rgba(0,113,227,0.06)] px-3 py-2 text-[12px] font-medium text-[#0071e3]'>
+					<div className='flex items-center justify-between rounded-full border border-[rgba(79,70,229,0.18)] bg-[rgba(79,70,229,0.06)] px-3 py-2 text-[12px] font-medium text-[#4F46E5]'>
 						<span>{pendingCount} 个任务处理中</span>
 						<Loader2 className='size-3.5 animate-spin' />
 					</div>
@@ -471,19 +471,19 @@ export function FileUpload({
 
 			{/* Pipeline timeline — springs in when active */}
 			{showTimeline && activeRecord && (
-				<div className='mx-5 mb-5 rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white/70 p-4 shadow-sm'>
+				<div className='mx-5 mb-5 rounded-xl border border-[rgba(0,0,0,0.08)] bg-white/80 p-4 shadow-sm'>
 					<div className='mb-3 flex items-center justify-between'>
-						<span className='flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8e8e96]'>
-							<span className='size-1.5 rounded-full bg-[#0071e3] shadow-[0_0_0_3px_rgba(0,113,227,0.2)]' />
+						<span className='flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#999]'>
+							<span className='size-1.5 rounded-full bg-[#4F46E5] shadow-[0_0_0_3px_rgba(79,70,229,0.2)]' />
 							{activeRecord.currentStage || '排队中'}
 						</span>
-						<span className='text-[11px] font-medium tabular-nums text-[#8e8e96]'>
+						<span className='text-[11px] font-medium tabular-nums text-[#999]'>
 							{Math.round(activeRecord.progress ?? 0)}%
 						</span>
 					</div>
-					<div className='ios-progress mb-3'>
+					<div className='progress-track mb-3'>
 						<div
-							className='ios-progress-bar'
+							className='progress-bar'
 							style={{ width: `${Math.max(6, activeRecord.progress ?? stageIndex * 28)}%` }}
 						/>
 					</div>
@@ -503,13 +503,13 @@ export function FileUpload({
 											state === 'done' &&
 												'bg-emerald-500 text-white',
 											state === 'active' &&
-												'bg-[#0071e3] text-white shadow-[0_0_0_4px_rgba(0,113,227,0.16)]',
+												'bg-[#4F46E5] text-white shadow-[0_0_0_4px_rgba(79,70,229,0.16)]',
 											state === 'idle' &&
-												'bg-[rgba(0,0,0,0.06)] text-[#8e8e96]'
+												'bg-[rgba(0,0,0,0.06)] text-[#999]'
 										)}
 										style={
 											state === 'active'
-												? { animation: 'ios-pulse 2s ease-in-out infinite' }
+												? { animation: 'pulseGlow 2s ease-in-out infinite' }
 												: undefined
 										}>
 										{state === 'done' ? (
@@ -522,8 +522,8 @@ export function FileUpload({
 										className={cn(
 											'text-[12.5px] transition-colors duration-300',
 											state === 'idle'
-												? 'text-[#8e8e96]'
-												: 'text-[#0d0d12] font-medium'
+												? 'text-[#999]'
+												: 'text-[#1A1A1A] font-medium'
 										)}>
 										{step.label}
 									</span>

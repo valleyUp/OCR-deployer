@@ -1,30 +1,33 @@
 /**
- * iOS-design-language motion tokens.
- * Spring-physics curves, not generic easings.
+ * Motion tokens — spring-physics curves & timing system.
+ * Aligned with the 方案 A design spec.
  */
 
-/* spring — quick, responsive. Use for button taps, toggles, checkmarks. */
-export const SPRING_QUICK = 'cubic-bezier(0.22, 0.95, 0.34, 1.02)'
+/* Spring — responsive with overshoot. Use for buttons, toggles, card reveals. */
+export const EASE_SPRING = 'cubic-bezier(0.34, 1.56, 0.64, 1)'
 
-/* spring — smooth, with gentle overshoot. Use for panel entrances, card reveals. */
-export const SPRING_SMOOTH = 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+/* Out-expo — fast in, slow out. Most common transition curve. */
+export const EASE_OUT_EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'
 
-/* decelerate — iOS scroll-like. Use for things coming to rest. */
+/* In-out-circ — smooth symmetric. Use for things settling into place. */
+export const EASE_IN_OUT_CIRC = 'cubic-bezier(0.85, 0, 0.15, 1)'
+
+/* Decelerate — scroll-like deceleration. */
 export const DECELERATE = 'cubic-bezier(0.05, 0.7, 0.1, 1)'
 
 export const DURATION = {
 	instant: 80,
-	fast: 180,
-	normal: 280,
-	slow: 420,
-	entrance: 520
+	fast: 150,
+	normal: 250,
+	slow: 400,
+	elaborate: 600
 } as const
 
 export const TRANSITION_BASE =
-	'transition-[background-color,color,border-color,box-shadow,transform,opacity] duration-180 ease-out'
+	'transition-[background-color,color,border-color,box-shadow,transform,opacity] duration-150 ease-out'
 
 export const TRANSITION_SLOW =
-	'transition-[background-color,color,border-color,box-shadow,transform,opacity] duration-300 ease-out'
+	'transition-[background-color,color,border-color,box-shadow,transform,opacity] duration-250 ease-out'
 
 export const CARD_ENTER =
 	'motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300'

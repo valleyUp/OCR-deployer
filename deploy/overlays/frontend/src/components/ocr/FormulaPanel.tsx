@@ -411,7 +411,7 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 			tabIndex={0}
 			onKeyDown={handleKeyDown}
 			className='flex h-full flex-col overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.64),rgba(248,250,252,0.72))] outline-none'>
-			<div className='ios-glass-toolbar sticky top-0 z-10 flex flex-col gap-2 px-4 py-3'>
+			<div className='surface-toolbar sticky top-0 z-10 flex flex-col gap-2 px-4 py-3'>
 				<div className='flex items-center justify-between gap-3'>
 					<div className='flex items-center gap-2 text-sm font-semibold text-[#0d0d12]'>
 						<span className='flex size-8 items-center justify-center rounded-2xl bg-violet-100 text-violet-600'>
@@ -451,7 +451,7 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 				</div>
 			</div>
 
-			<div className='ios-scrollbar flex-1 overflow-auto'>
+			<div className='scrollbar-thin flex-1 overflow-auto'>
 				{filtered.length === 0 ? (
 					<div className='flex h-full items-center justify-center px-6 text-center text-sm text-[#8e8e96]'>
 						<p>没有匹配 "{query}" 的公式</p>

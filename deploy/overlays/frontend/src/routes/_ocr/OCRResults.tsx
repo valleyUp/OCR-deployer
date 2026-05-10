@@ -46,13 +46,13 @@ function MarkdownSkeleton() {
 				<Skeleton className='h-3.5 w-[88%] rounded-full' />
 				<Skeleton className='h-3.5 w-[70%] rounded-full' />
 			</div>
-			<Skeleton className='h-40 w-full rounded-2xl' />
+			<Skeleton className='h-40 w-full rounded-xl' />
 			<div className='space-y-2'>
 				<Skeleton className='h-3.5 w-[84%] rounded-full' />
 				<Skeleton className='h-3.5 w-[94%] rounded-full' />
 				<Skeleton className='h-3.5 w-[60%] rounded-full' />
 			</div>
-			<Skeleton className='h-24 w-full rounded-2xl' />
+			<Skeleton className='h-24 w-full rounded-xl' />
 		</div>
 	)
 }
@@ -253,18 +253,18 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 			: []
 
 	return (
-		<div className="flex h-full flex-col bg-[#fafbfd]">
+		<div className="flex h-full flex-col bg-[#F9F9F7]">
 			<Tabs
 				value={activeTab}
 				onValueChange={value => setActiveTab(value as ResultTab)}
 				className='flex flex-1 flex-col overflow-hidden'>
-				<div className='ios-glass-toolbar sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-2.5'>
+				<div className='surface-toolbar sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-2.5'>
 					<TabsList
-						className='relative grid h-9 grid-cols-3 gap-0.5 rounded-xl bg-[rgba(0,0,0,0.04)] p-1'
+						className='relative grid h-9 grid-cols-3 gap-0.5 rounded-lg bg-[rgba(0,0,0,0.04)] p-1'
 						>
 						{/* Sliding pill */}
 						<div
-							className='ios-tab-thumb'
+							className='tab-thumb'
 							style={{
 								left: activeTab === 'markdown' ? '4px' : activeTab === 'json' ? 'calc(33.333% + 0.67px)' : 'calc(66.667% - 0.67px)',
 								width: 'calc(33.333% - 4px)'
@@ -272,19 +272,19 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 						/>
 						<TabsTrigger
 							value='markdown'
-							className='ios-tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-lg px-1 text-[12.5px] font-medium text-[#8e8e96] transition-colors duration-300 data-[state=active]:text-[#0d0d12]'>
+							className='tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-md px-1 text-[12.5px] font-medium text-[#999999] transition-colors duration-300 data-[state=active]:text-[#1A1A1A]'>
 							<AppWindowIcon className='size-3.5' />
 							Markdown
 						</TabsTrigger>
 						<TabsTrigger
 							value='json'
-							className='ios-tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-lg px-1 text-[12.5px] font-medium text-[#8e8e96] transition-colors duration-300 data-[state=active]:text-[#0d0d12]'>
+							className='tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-md px-1 text-[12.5px] font-medium text-[#999999] transition-colors duration-300 data-[state=active]:text-[#1A1A1A]'>
 							<FileJsonIcon className='size-3.5' />
 							JSON
 						</TabsTrigger>
 						<TabsTrigger
 							value='formulas'
-							className='ios-tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-lg px-1 text-[12.5px] font-medium text-[#8e8e96] transition-colors duration-300 data-[state=active]:text-[#0d0d12]'>
+							className='tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-md px-1 text-[12.5px] font-medium text-[#999999] transition-colors duration-300 data-[state=active]:text-[#1A1A1A]'>
 							<Sigma className='size-3.5' />
 							公式
 						</TabsTrigger>
@@ -295,11 +295,11 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 							<Button
 								variant='ghost'
 								size='icon-sm'
-								className='ios-btn-icon size-8 text-[#8e8e96]'
+								className='btn-icon size-8 text-[#6B6B6B]'
 								aria-label='复制 Markdown'
 								onClick={handleCopy}>
 								{copiedAt === 'copy' ? (
-									<CheckIcon className='size-4 text-emerald-600' />
+									<CheckIcon className='size-4 text-[#16A34A]' />
 								) : (
 									<CopyIcon className='size-4' />
 								)}
@@ -307,11 +307,11 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 							<Button
 								variant='ghost'
 								size='icon-sm'
-								className='ios-btn-icon size-8 text-[#8e8e96]'
+								className='btn-icon size-8 text-[#6B6B6B]'
 								aria-label='下载 Markdown'
 								onClick={handleDownload}>
 								{copiedAt === 'download' ? (
-									<CheckIcon className='size-4 text-emerald-600' />
+									<CheckIcon className='size-4 text-[#16A34A]' />
 								) : (
 									<DownloadIcon className='size-4' />
 								)}
@@ -321,14 +321,14 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 				</div>
 
 				{metaBadges.length > 0 && (
-					<div className='flex flex-wrap items-center gap-1.5 border-b border-[rgba(0,0,0,0.05)] bg-[rgba(255,255,255,0.5)] px-4 py-2'>
+					<div className='flex flex-wrap items-center gap-1.5 border-b border-[rgba(0,0,0,0.08)] bg-[rgba(255,255,255,0.6)] px-4 py-2'>
 						{metaBadges.map(item => {
 							const Icon = item.icon
 							return (
 								<Badge
 									key={item.key}
 									variant='outline'
-									className='ios-pill h-6 gap-1 px-2 text-[11px] font-medium'>
+									className='pill h-6 gap-1 px-2 text-[11px] font-medium'>
 									<Icon className='size-3' />
 									{item.label}
 								</Badge>
@@ -338,23 +338,23 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 				)}
 
 				<div className='flex-1 overflow-hidden'>
-					<div className='ios-tab-content h-full' key={activeTab}>
+					<div className='tab-content-enter h-full' key={activeTab}>
 					<TabsContent value='markdown' className='h-full m-0 mt-0'>
 						{status === 'pending' || status === 'processing' ? (
-							<div className='ios-scrollbar h-full overflow-auto'>
+							<div className='scrollbar-thin h-full overflow-auto'>
 								<MarkdownSkeleton />
 							</div>
 						) : blocks.length > 0 && status === 'completed' ? (
 							<MarkdownPreview />
 						) : status === 'completed' ? (
 							<div className='flex h-full items-center justify-center'>
-								<div className='rounded-2xl border border-dashed border-[rgba(0,0,0,0.08)] bg-white/50 p-5 text-center text-sm text-[#8e8e96]'>
+								<div className='rounded-xl border border-dashed border-[rgba(0,0,0,0.12)] bg-white/50 p-5 text-center text-sm text-[#999999]'>
 									<p>暂无 Markdown 内容</p>
 								</div>
 							</div>
 						) : status === 'failed' ? (
 							<div className='flex h-full items-center justify-center'>
-								<div className='max-w-xs rounded-2xl border border-red-200 bg-red-50/90 p-4 text-center text-sm text-red-600'>
+								<div className='max-w-xs rounded-xl border border-red-200 bg-red-50/90 p-4 text-center text-sm text-[#DC2626]'>
 									<p className='font-medium'>解析失败</p>
 									{errorMessage && (
 										<p className='mt-1 break-all text-[12px] text-red-500/90'>
@@ -365,18 +365,18 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 							</div>
 						) : (
 							<div className='flex h-full items-center justify-center'>
-								<div className='flex flex-col items-center gap-2 rounded-2xl border border-dashed border-[rgba(0,0,0,0.08)] bg-white/50 p-5 text-center text-sm text-[#8e8e96]'>
-									<FileTextIcon className='size-8 text-[#8e8e96]' />
+								<div className='flex flex-col items-center gap-2 rounded-xl border border-dashed border-[rgba(0,0,0,0.12)] bg-white/50 p-5 text-center text-sm text-[#999999]'>
+									<FileTextIcon className='size-8 text-[#999999]' />
 									<p>请先上传文件并等待处理完成</p>
 								</div>
 							</div>
 						)}
 					</TabsContent>
 
-					<TabsContent value='json' className='ios-scrollbar h-full m-0 mt-0 overflow-auto'>
+					<TabsContent value='json' className='scrollbar-thin h-full m-0 mt-0 overflow-auto'>
 						<div className={cn('p-4')}>
 							{response && status === 'completed' ? (
-								<div className='overflow-auto rounded-2xl border border-[rgba(0,0,0,0.06)] bg-[rgba(255,255,255,0.6)] p-4'>
+								<div className='overflow-auto rounded-xl border border-[rgba(0,0,0,0.08)] bg-[rgba(255,255,255,0.8)] p-4'>
 									<JsonPreview json={response} />
 								</div>
 							) : status === 'pending' || status === 'processing' ? (
@@ -387,7 +387,7 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 									<Skeleton className='h-3 w-[76%]' />
 								</div>
 							) : (
-								<div className='flex h-full items-center justify-center text-sm text-[#8e8e96]'>
+								<div className='flex h-full items-center justify-center text-sm text-[#999999]'>
 									<p>暂无数据</p>
 								</div>
 							)}
@@ -399,7 +399,7 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 							<FormulaPanel formulas={formulas} taskId={response?.task_id} />
 						) : (
 							<div className='flex h-full items-center justify-center'>
-								<div className='rounded-2xl border border-dashed border-[rgba(0,0,0,0.08)] bg-white/50 p-5 text-center text-sm text-[#8e8e96]'>
+								<div className='rounded-xl border border-dashed border-[rgba(0,0,0,0.12)] bg-white/50 p-5 text-center text-sm text-[#999999]'>
 									<p>暂无公式</p>
 								</div>
 							</div>

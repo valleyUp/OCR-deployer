@@ -108,16 +108,16 @@ export function OCRPage() {
 	}
 
 	return (
-		<div className='ios-shell bg-[#f2f4f7]'>
+		<div className='app-shell bg-[#F9F9F7]'>
 			{/* Outer padding gives the window a floating appearance */}
-			<div className='ios-window p-2'>
-				<div className='ios-glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px]'>
+			<div className='app-window p-2'>
+				<div className='surface-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl'>
 					<AppHeader uploadFile={uploadFile} result={parsedResult} />
 
 					{/* Main three-column layout */}
 					<div className='flex min-h-0 flex-1 overflow-hidden'>
 						{/* Sidebar */}
-						<aside className='ios-glass-sidebar flex w-[272px] shrink-0 flex-col overflow-hidden rounded-bl-[22px]'>
+						<aside className='surface-sidebar flex w-[272px] shrink-0 flex-col overflow-hidden rounded-bl-xl'>
 							<FileUpload
 								currentLocalId={currentLocalId}
 								onActiveTaskChange={localId => setCurrentLocalId(localId)}
@@ -147,7 +147,7 @@ export function OCRPage() {
 							/>
 
 							<section
-								className='flex shrink-0 flex-col overflow-hidden border-l border-[rgba(0,0,0,0.06)]'
+								className='flex shrink-0 flex-col overflow-hidden border-l border-[rgba(0,0,0,0.08)]'
 								style={{ width: `${resultsWidth}px` }}>
 								<OCRResults result={parsedResult} fileName={uploadFile?.name} />
 							</section>

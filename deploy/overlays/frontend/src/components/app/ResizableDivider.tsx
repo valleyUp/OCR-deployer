@@ -112,12 +112,12 @@ export function ResizableDivider({
 			{/* Thin line — always visible, matching sidebar border weight */}
 			<span
 				aria-hidden='true'
-				className='absolute inset-y-4 left-1/2 w-px -translate-x-1/2 rounded-full bg-[rgba(0,0,0,0.06)] transition-colors duration-200 group-hover:bg-[rgba(0,0,0,0.14)] group-active:bg-blue-400/50'
+				className='absolute inset-y-4 left-1/2 w-px -translate-x-1/2 rounded-full bg-[rgba(0,0,0,0.06)] transition-colors duration-200 group-hover:bg-[rgba(0,0,0,0.14)] group-active:bg-indigo-500/50'
 			/>
 			{/* Drag handle pip — appears on hover, grows on active */}
 			<span
 				aria-hidden='true'
-				className='absolute top-1/2 left-1/2 h-8 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-transparent transition-all duration-200 group-hover:bg-[rgba(0,0,0,0.16)] group-active:h-12 group-active:w-1.5 group-active:bg-blue-400/60 group-focus-visible:bg-[rgba(0,0,0,0.16)]'
+				className='absolute top-1/2 left-1/2 h-8 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-transparent transition-all duration-200 group-hover:bg-[rgba(0,0,0,0.16)] group-active:h-12 group-active:w-1.5 group-active:bg-indigo-500/60 group-focus-visible:bg-[rgba(0,0,0,0.16)]'
 			/>
 		</div>
 	)

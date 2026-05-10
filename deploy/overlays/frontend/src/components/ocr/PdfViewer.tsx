@@ -302,14 +302,14 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
     return (
         <div className={`pdf-viewer flex flex-col h-full overflow-hidden ${className}`}>
             {/* 工具栏：缩放 + 翻页 */}
-            <div className="toolbar ios-glass-toolbar sticky top-0 z-10 grid grid-cols-2 gap-4 px-4 py-2 xl:grid-cols-3">
+            <div className="toolbar surface-toolbar sticky top-0 z-10 grid grid-cols-2 gap-4 px-4 py-2 xl:grid-cols-3">
                 <div className='hidden min-w-0 text-nowrap truncate text-[12px] font-medium text-[#8e8e96] xl:block'>{file?.name || 'PDF 文件预览'}</div>
                 <div className="flex items-center justify-center gap-3">
 
                     <button
                         onClick={prevPage}
                         disabled={currentPage <= 1}
-                        className="ios-btn-icon size-8 cursor-pointer"
+                        className="btn-icon size-8 cursor-pointer"
                     >
                         <ChevronLeft size={20} strokeWidth={1} />
                     </button>
@@ -337,7 +337,7 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
                     <button
                         onClick={nextPage}
                         disabled={currentPage >= numPages}
-                        className="ios-btn-icon size-8 cursor-pointer"
+                        className="btn-icon size-8 cursor-pointer"
                     >
                         <ChevronRight size={20} strokeWidth={1} />
                     </button>
@@ -345,21 +345,21 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
                 </div>
 
                 <div className="flex items-center justify-end gap-3">
-                    <button onClick={zoomOut} className="ios-btn-icon size-8 cursor-pointer">
+                    <button onClick={zoomOut} className="btn-icon size-8 cursor-pointer">
                         <ZoomOut size={20} strokeWidth={1} />
                     </button>
                     <span className="w-10 text-center text-sm tabular-nums text-[#8e8e96]">{Math.round(scale * 100)}%</span>
-                    <button onClick={zoomIn} className="ios-btn-icon size-8 cursor-pointer">
+                    <button onClick={zoomIn} className="btn-icon size-8 cursor-pointer">
                         <ZoomIn size={20} strokeWidth={1} />
                     </button>
-                    <button onClick={resetZoom} className="ios-btn-icon size-8 cursor-pointer">
+                    <button onClick={resetZoom} className="btn-icon size-8 cursor-pointer">
                         <RotateCcw size={18} strokeWidth={1} />
                     </button>
                 </div>
             </div>
 
             {/* 滚动容器 - 虚拟渲染 */}
-            <div ref={scrollContainerRef} className="ios-scrollbar pdf-scroll-container relative flex-1 overflow-auto bg-[linear-gradient(135deg,rgba(248,250,252,0.86),rgba(239,246,255,0.7))] p-6">
+            <div ref={scrollContainerRef} className="scrollbar-thin pdf-scroll-container relative flex-1 overflow-auto bg-[#F9F9F7] p-6">
                 <Document
                     file={file}
                     options={documentOptions}

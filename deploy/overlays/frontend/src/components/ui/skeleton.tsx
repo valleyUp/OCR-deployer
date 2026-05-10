@@ -6,7 +6,7 @@ export function Skeleton({ className, ...props }: SkeletonProps) {
 	return (
 		<div
 			className={cn(
-				'ios-skeleton rounded-full',
+				'skeleton-shimmer rounded-full',
 				className
 			)}
 			{...props}

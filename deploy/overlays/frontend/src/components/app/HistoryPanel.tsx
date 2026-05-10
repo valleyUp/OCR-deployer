@@ -46,11 +46,11 @@ const MODE_LABEL: Record<HistoryRecord['processingMode'], string> = {
 
 function StatusBadge({ status }: { status: HistoryRecord['status'] }) {
 	const tone: Record<HistoryRecord['status'], string> = {
-		pending: 'bg-[rgba(0,0,0,0.04)] text-[#54545c]',
-		processing: 'bg-[rgba(0,113,227,0.08)] text-[#0071e3]',
-		completed: 'bg-[rgba(48,177,88,0.08)] text-[#30b158]',
-		failed: 'bg-[rgba(224,58,58,0.08)] text-[#e03a3a]',
-		cancelled: 'bg-[rgba(0,0,0,0.04)] text-[#8e8e96]'
+		pending: 'bg-[rgba(0,0,0,0.04)] text-[#6B6B6B]',
+		processing: 'bg-[rgba(79,70,229,0.08)] text-[#4F46E5]',
+		completed: 'bg-[rgba(22,163,74,0.08)] text-[#16A34A]',
+		failed: 'bg-[rgba(220,38,38,0.08)] text-[#DC2626]',
+		cancelled: 'bg-[rgba(0,0,0,0.04)] text-[#999999]'
 	}
 	const Icon =
 		status === 'completed'
@@ -131,33 +131,33 @@ function HistoryItem({
 			}}
 			aria-disabled={!clickable}
 			data-active={active ? 'true' : 'false'}
-			className='ios-history-item'
+			className='history-item'
 			style={{
-				animation: `ios-item-in 340ms cubic-bezier(0.22, 0.95, 0.34, 1.02) both`,
+				animation: `fadeSlideUp 340ms var(--ease-out-expo) both`,
 				animationDelay: `${index * 45}ms`
 			}}>
 			<div className='flex items-start gap-2.5'>
 				<span
 					className={cn(
-						'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl transition-colors duration-300',
+						'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-300',
 						record.processingMode === 'formula'
-							? 'bg-[rgba(139,92,246,0.10)] text-violet-500'
-							: 'bg-[rgba(0,113,227,0.10)] text-[#0071e3]'
+							? 'bg-[rgba(124,58,237,0.10)] text-violet-500'
+							: 'bg-[rgba(79,70,229,0.10)] text-indigo-500'
 					)}>
 					<Icon className='size-4' />
 				</span>
 				<div className='min-w-0 flex-1'>
 					<div className='flex items-center gap-1.5'>
-						<p className='truncate text-[12.5px] font-semibold text-[#0d0d12]'>
+						<p className='truncate text-[12.5px] font-semibold text-[#1A1A1A]'>
 							{record.fileName}
 						</p>
 						<Badge
 							variant='outline'
-							className='h-4 shrink-0 rounded-full border-[rgba(0,0,0,0.06)] bg-[rgba(255,255,255,0.6)] px-1.5 text-[9px] font-medium text-[#8e8e96]'>
+							className='h-4 shrink-0 rounded-full border-[rgba(0,0,0,0.08)] bg-[rgba(255,255,255,0.6)] px-1.5 text-[9px] font-medium text-[#999999]'>
 							{MODE_LABEL[record.processingMode]}
 						</Badge>
 					</div>
-					<div className='mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#8e8e96]'>
+					<div className='mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#999999]'>
 						<StatusBadge status={record.status} />
 						<span>{formatFileSize(record.fileSize)}</span>
 						<span>·</span>
@@ -171,21 +171,21 @@ function HistoryItem({
 					</div>
 					{record.status === 'processing' && (
 						<div className='mt-2'>
-							<div className='ios-progress'>
+							<div className='progress-track'>
 								<div
-									className='ios-progress-bar'
+									className='progress-bar'
 									style={{ width: `${progressValue}%` }}
 								/>
 							</div>
 							{record.currentStage && (
-								<p className='mt-1 text-[10px] text-[#8e8e96]'>
+								<p className='mt-1 text-[10px] text-[#999999]'>
 									{record.currentStage}
 								</p>
 							)}
 						</div>
 					)}
 					{record.status === 'failed' && record.errorMessage && (
-						<p className='mt-1 line-clamp-2 break-all text-[10px] text-[#e03a3a]'>
+						<p className='mt-1 line-clamp-2 break-all text-[10px] text-[#DC2626]'>
 							{record.errorMessage}
 						</p>
 					)}
@@ -196,7 +196,7 @@ function HistoryItem({
 								onClick={handleCopyTaskId}
 								aria-label='复制任务 ID'
 								className={cn(
-									'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-mono text-[10px] text-[#8e8e96] transition-colors hover:bg-white hover:text-[#0d0d12]'
+									'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-mono text-[10px] text-[#999999] transition-colors hover:bg-white hover:text-[#1A1A1A]'
 								)}>
 								{idCopied ? (
 									<Check className='size-2.5' />
@@ -210,7 +210,7 @@ function HistoryItem({
 							type='button'
 							onClick={handleDelete}
 							aria-label='删除记录'
-							className='ml-auto inline-flex size-6 items-center justify-center rounded-full text-[#8e8e96] opacity-0 transition-all duration-200 hover:bg-[rgba(224,58,58,0.08)] hover:text-[#e03a3a] group-hover:opacity-100 focus-visible:opacity-100'>
+							className='ml-auto inline-flex size-6 items-center justify-center rounded-full text-[#999999] opacity-0 transition-all duration-200 hover:bg-[rgba(220,38,38,0.08)] hover:text-[#DC2626] group-hover:opacity-100 focus-visible:opacity-100'>
 							<Trash2 className='size-3' />
 						</button>
 					</div>
@@ -251,14 +251,14 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 	}
 
 	return (
-		<div className='flex min-h-0 flex-1 flex-col border-t border-[rgba(0,0,0,0.05)]'>
+		<div className='flex min-h-0 flex-1 flex-col border-t border-[rgba(0,0,0,0.08)]'>
 			<div className='flex items-center justify-between gap-2 px-5 py-3'>
-				<div className='flex flex-1 items-center gap-1.5 text-[12px] font-semibold text-[#0d0d12]'>
-					<History className='size-3.5 text-[#8e8e96]' />
+				<div className='flex flex-1 items-center gap-1.5 text-[12px] font-semibold text-[#1A1A1A]'>
+					<History className='size-3.5 text-[#999999]' />
 					历史记录
 					<Badge
 						variant='outline'
-						className='h-4 rounded-full border-[rgba(0,0,0,0.06)] bg-[rgba(255,255,255,0.6)] px-1.5 text-[10px] font-medium text-[#8e8e96]'>
+						className='h-4 rounded-full border-[rgba(0,0,0,0.08)] bg-[rgba(255,255,255,0.6)] px-1.5 text-[10px] font-medium text-[#999999]'>
 						{records.length}
 					</Badge>
 				</div>
@@ -267,20 +267,20 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 						variant='ghost'
 						size='icon-sm'
 						aria-label='清空历史'
-						className='ios-btn-icon size-7 text-[#8e8e96] hover:text-[#e03a3a]'
+						className='btn-icon size-7 text-[#999999] hover:text-[#DC2626]'
 						onClick={() => setConfirmClear(true)}>
 						<Trash2 className='size-3.5' />
 					</Button>
 				)}
 			</div>
 
-			<div className='ios-scrollbar flex-1 overflow-auto py-1'>
+			<div className='scrollbar-thin flex-1 overflow-auto py-1'>
 				{records.length === 0 ? (
-					<div className='mx-5 flex h-full min-h-[8rem] flex-col items-center justify-center rounded-2xl border border-dashed border-[rgba(0,0,0,0.08)] bg-[rgba(255,255,255,0.4)] px-4 py-8 text-center'>
-						<span className='mb-2 flex size-10 items-center justify-center rounded-2xl bg-[rgba(0,0,0,0.03)] text-[#8e8e96]'>
+					<div className='mx-5 flex h-full min-h-[8rem] flex-col items-center justify-center rounded-xl border border-dashed border-[rgba(0,0,0,0.08)] bg-[rgba(255,255,255,0.4)] px-4 py-8 text-center'>
+						<span className='mb-2 flex size-10 items-center justify-center rounded-xl bg-[rgba(0,0,0,0.04)] text-[#999999]'>
 							<History className='size-5' />
 						</span>
-						<p className='text-[12px] font-medium text-[#54545c]'>暂无记录</p>
+						<p className='text-[12px] font-medium text-[#6B6B6B]'>暂无记录</p>
 					</div>
 				) : (
 					records.map((record, index) => (
@@ -299,7 +299,7 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 			<Dialog open={confirmClear} onOpenChange={setConfirmClear}>
 				<DialogContent className='sm:max-w-[380px]'>
 					<DialogHeader>
-						<DialogTitle>清空历史？</DialogTitle>
+						<DialogTitle className='font-[family-name:var(--font-display)]'>清空历史？</DialogTitle>
 						<DialogDescription>
 							将删除全部 {records.length} 条本地历史记录，无法撤销。
 						</DialogDescription>
@@ -309,7 +309,7 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 							取消
 						</Button>
 						<Button
-							variant='destructive'
+							className='bg-[#DC2626] hover:bg-[#B91C1C]'
 							onClick={async () => {
 								await clear()
 								setConfirmClear(false)

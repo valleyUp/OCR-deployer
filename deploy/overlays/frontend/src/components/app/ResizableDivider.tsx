@@ -15,14 +15,9 @@ interface ResizableDividerProps {
 }
 
 /**
- * Thin vertical resize handle. Manages its own pointer capture so the parent
- * only receives the final numeric width through `onChange` / `onCommit`.
- *
- * `direction` controls the sign convention when dragging:
- *   - 'right' (default) means the controlled panel is to the RIGHT of the
- *     divider; dragging the handle right SHRINKS that panel.
- *   - 'left' means the controlled panel is to the LEFT of the divider;
- *     dragging right GROWS that panel.
+ * Invisible-gap divider. By default it's just breathing room between panels.
+ * A subtle drag handle appears on hover; the full indicator shows while dragging.
+ * Double-click resets to default width.
  */
 export function ResizableDivider({
 	value,
@@ -111,15 +106,18 @@ export function ResizableDivider({
 			onKeyDown={handleKeyDown}
 			onDoubleClick={handleDoubleClick}
 			className={cn(
-				'group relative flex w-3 shrink-0 cursor-col-resize items-center justify-center outline-none',
+				'group relative flex w-1.5 shrink-0 cursor-col-resize items-center justify-center outline-none',
 				className
 			)}>
-			<span
-				className='absolute inset-y-4 left-1/2 w-px -translate-x-1/2 rounded-full bg-white/70 shadow-[0_0_0_1px_rgba(148,163,184,0.22)] transition-colors duration-150 group-hover:bg-blue-300 group-active:bg-blue-500 group-focus-visible:bg-blue-500'
-			/>
+			{/* Invisible by default. A barely-there line fades in on group hover. */}
 			<span
 				aria-hidden='true'
-				className='absolute top-1/2 left-1/2 h-10 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-300/0 transition-colors duration-150 group-hover:bg-blue-500/50 group-active:bg-blue-600/70'
+				className='absolute inset-y-6 left-1/2 w-px -translate-x-1/2 rounded-full bg-transparent transition-colors duration-300 group-hover:bg-black/8'
+			/>
+			{/* Drag handle — visible only on hover, fully opaque while dragging */}
+			<span
+				aria-hidden='true'
+				className='absolute top-1/2 left-1/2 h-8 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-transparent transition-all duration-300 group-hover:bg-black/15 group-active:h-12 group-active:w-1 group-active:bg-blue-400/60'
 			/>
 		</div>
 	)

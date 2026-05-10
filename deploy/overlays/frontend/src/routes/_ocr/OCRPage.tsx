@@ -147,7 +147,7 @@ export function OCRPage() {
 							/>
 
 							<section
-								className='flex shrink-0 flex-col overflow-hidden border-l border-[rgba(0,0,0,0.06)]'
+								className='flex shrink-0 flex-col overflow-hidden'
 								style={{ width: `${resultsWidth}px` }}>
 								<OCRResults result={parsedResult} fileName={uploadFile?.name} />
 							</section>

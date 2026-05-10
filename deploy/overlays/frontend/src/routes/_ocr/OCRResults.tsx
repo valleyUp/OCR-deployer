@@ -259,22 +259,22 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 				onValueChange={value => setActiveTab(value as ResultTab)}
 				className='flex flex-1 flex-col overflow-hidden'>
 				<div className='ios-glass-toolbar sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-2.5'>
-					<TabsList className='h-9 gap-0.5 rounded-full bg-[rgba(0,0,0,0.04)] p-1'>
+					<TabsList className='h-9 gap-0.5 rounded-xl bg-[rgba(0,0,0,0.04)] p-1'>
 						<TabsTrigger
 							value='markdown'
-							className='h-7 cursor-pointer gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-[#8e8e96] transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-[#0071e3] data-[state=active]:shadow-sm'>
+							className='h-7 cursor-pointer gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#8e8e96] transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-[#0071e3] data-[state=active]:shadow-sm'>
 							<AppWindowIcon className='size-3.5' />
 							Markdown
 						</TabsTrigger>
 						<TabsTrigger
 							value='json'
-							className='h-7 cursor-pointer gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-[#8e8e96] transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-[#0071e3] data-[state=active]:shadow-sm'>
+							className='h-7 cursor-pointer gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#8e8e96] transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-[#0071e3] data-[state=active]:shadow-sm'>
 							<FileJsonIcon className='size-3.5' />
 							JSON
 						</TabsTrigger>
 						<TabsTrigger
 							value='formulas'
-							className='h-7 cursor-pointer gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-[#8e8e96] transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-violet-500 data-[state=active]:shadow-sm'>
+							className='h-7 cursor-pointer gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#8e8e96] transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-violet-500 data-[state=active]:shadow-sm'>
 							<Sigma className='size-3.5' />
 							公式
 						</TabsTrigger>
@@ -328,6 +328,7 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 				)}
 
 				<div className='flex-1 overflow-hidden'>
+					<div className='ios-tab-content h-full' key={activeTab}>
 					<TabsContent value='markdown' className='h-full m-0 mt-0'>
 						{status === 'pending' || status === 'processing' ? (
 							<div className='ios-scrollbar h-full overflow-auto'>
@@ -394,6 +395,7 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 							</div>
 						)}
 					</TabsContent>
+				</div>
 				</div>
 			</Tabs>
 		</div>

@@ -15,8 +15,8 @@ interface ResizableDividerProps {
 }
 
 /**
- * Invisible-gap divider. By default it's just breathing room between panels.
- * A subtle drag handle appears on hover; the full indicator shows while dragging.
+ * Thin vertical resize handle. The line is always visible (same weight as
+ * sidebar border). A subtle drag handle appears on hover / keyboard focus.
  * Double-click resets to default width.
  */
 export function ResizableDivider({
@@ -106,18 +106,18 @@ export function ResizableDivider({
 			onKeyDown={handleKeyDown}
 			onDoubleClick={handleDoubleClick}
 			className={cn(
-				'group relative flex w-1.5 shrink-0 cursor-col-resize items-center justify-center outline-none',
+				'group relative flex w-1 shrink-0 cursor-col-resize items-center justify-center outline-none',
 				className
 			)}>
-			{/* Invisible by default. A barely-there line fades in on group hover. */}
+			{/* Thin line — always visible, matching sidebar border weight */}
 			<span
 				aria-hidden='true'
-				className='absolute inset-y-6 left-1/2 w-px -translate-x-1/2 rounded-full bg-transparent transition-colors duration-300 group-hover:bg-black/8'
+				className='absolute inset-y-4 left-1/2 w-px -translate-x-1/2 rounded-full bg-[rgba(0,0,0,0.06)] transition-colors duration-200 group-hover:bg-[rgba(0,0,0,0.14)] group-active:bg-blue-400/50'
 			/>
-			{/* Drag handle — visible only on hover, fully opaque while dragging */}
+			{/* Drag handle pip — appears on hover, grows on active */}
 			<span
 				aria-hidden='true'
-				className='absolute top-1/2 left-1/2 h-8 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-transparent transition-all duration-300 group-hover:bg-black/15 group-active:h-12 group-active:w-1 group-active:bg-blue-400/60'
+				className='absolute top-1/2 left-1/2 h-8 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-transparent transition-all duration-200 group-hover:bg-[rgba(0,0,0,0.16)] group-active:h-12 group-active:w-1.5 group-active:bg-blue-400/60 group-focus-visible:bg-[rgba(0,0,0,0.16)]'
 			/>
 		</div>
 	)

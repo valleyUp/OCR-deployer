@@ -259,22 +259,32 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 				onValueChange={value => setActiveTab(value as ResultTab)}
 				className='flex flex-1 flex-col overflow-hidden'>
 				<div className='ios-glass-toolbar sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-2.5'>
-					<TabsList className='h-9 gap-0.5 rounded-xl bg-[rgba(0,0,0,0.04)] p-1'>
+					<TabsList
+						className='relative grid h-9 grid-cols-3 gap-0.5 rounded-xl bg-[rgba(0,0,0,0.04)] p-1'
+						>
+						{/* Sliding pill */}
+						<div
+							className='ios-tab-thumb'
+							style={{
+								left: activeTab === 'markdown' ? '4px' : activeTab === 'json' ? 'calc(33.333% + 0.67px)' : 'calc(66.667% - 0.67px)',
+								width: 'calc(33.333% - 4px)'
+							}}
+						/>
 						<TabsTrigger
 							value='markdown'
-							className='h-7 cursor-pointer gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#8e8e96] transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-[#0071e3] data-[state=active]:shadow-sm'>
+							className='ios-tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-lg px-1 text-[12.5px] font-medium text-[#8e8e96] transition-colors duration-300 data-[state=active]:text-[#0d0d12]'>
 							<AppWindowIcon className='size-3.5' />
 							Markdown
 						</TabsTrigger>
 						<TabsTrigger
 							value='json'
-							className='h-7 cursor-pointer gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#8e8e96] transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-[#0071e3] data-[state=active]:shadow-sm'>
+							className='ios-tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-lg px-1 text-[12.5px] font-medium text-[#8e8e96] transition-colors duration-300 data-[state=active]:text-[#0d0d12]'>
 							<FileJsonIcon className='size-3.5' />
 							JSON
 						</TabsTrigger>
 						<TabsTrigger
 							value='formulas'
-							className='h-7 cursor-pointer gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#8e8e96] transition-all duration-300 data-[state=active]:bg-white data-[state=active]:text-violet-500 data-[state=active]:shadow-sm'>
+							className='ios-tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-lg px-1 text-[12.5px] font-medium text-[#8e8e96] transition-colors duration-300 data-[state=active]:text-[#0d0d12]'>
 							<Sigma className='size-3.5' />
 							公式
 						</TabsTrigger>

@@ -185,13 +185,13 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 
 	if (!file) {
 		return (
-			<div className='flex h-full items-center justify-center bg-[radial-gradient(circle_at_50%_24%,rgba(37,99,235,0.08),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.68),rgba(248,250,252,0.72))]'>
-				<div className='ocr-card-enter max-w-sm rounded-[28px] border border-dashed border-slate-300/80 bg-white/60 px-8 py-9 text-center shadow-sm backdrop-blur-sm'>
-					<span className='mx-auto mb-4 flex size-14 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-500/20'>
+			<div className='flex h-full items-center justify-center bg-[#fafbfd]'>
+				<div className='ocr-card-enter max-w-sm rounded-[22px] border border-dashed border-[rgba(0,0,0,0.10)] bg-white/50 px-8 py-10 text-center backdrop-blur-sm'>
+					<span className='mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-[rgba(0,113,227,0.10)] text-[#0071e3]'>
 						<FileText className='size-7' />
 					</span>
-					<p className='text-[17px] font-semibold text-slate-950'>等待文件</p>
-					<p className='mt-1 text-[12px] leading-5 text-slate-500'>
+					<p className='text-[16px] font-semibold text-[#0d0d12]'>等待文件</p>
+					<p className='mt-1 text-[12px] leading-5 text-[#8e8e96]'>
 						从左侧上传、拖拽或粘贴图片开始
 					</p>
 				</div>
@@ -200,11 +200,11 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 	}
 
 	const imageToolbar = isImageFile ? (
-		<div className='pointer-events-auto absolute right-4 top-[76px] z-20 flex items-center gap-1 rounded-full border border-white/70 bg-white/90 px-1 py-1 shadow-lg shadow-slate-900/10 backdrop-blur-xl'>
+		<div className='pointer-events-auto absolute right-4 top-4 z-20 flex items-center gap-1 rounded-full border border-[rgba(0,0,0,0.06)] bg-white/82 px-1 py-1 shadow-sm backdrop-blur-xl'>
 			<Button
 				variant='ghost'
 				size='icon-sm'
-				className='ocr-icon-button size-8'
+				className='ios-btn-icon size-8'
 				aria-label='缩小'
 				disabled={imageZoom <= IMAGE_ZOOM_MIN + 1e-6}
 				onClick={() =>
@@ -220,7 +220,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 			<Button
 				variant='ghost'
 				size='icon-sm'
-				className='ocr-icon-button size-8'
+				className='ios-btn-icon size-8'
 				aria-label='放大'
 				disabled={imageZoom >= IMAGE_ZOOM_MAX - 1e-6}
 				onClick={() =>
@@ -230,11 +230,11 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 				}>
 				<Plus className='size-4' />
 			</Button>
-			<span className='mx-1 h-4 w-px bg-slate-200' aria-hidden='true' />
+			<span className='mx-1 h-4 w-px bg-[rgba(0,0,0,0.06)]' aria-hidden='true' />
 			<Button
 				variant='ghost'
 				size='icon-sm'
-				className='ocr-icon-button size-8'
+				className='ios-btn-icon size-8'
 				aria-label='适应窗口'
 				onClick={() => {
 					setImageZoom(1)
@@ -245,7 +245,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 			<Button
 				variant='ghost'
 				size='icon-sm'
-				className='ocr-icon-button size-8'
+				className='ios-btn-icon size-8'
 				aria-label='旋转 90°'
 				onClick={() => setImageRotation(r => (r + 90) % 360)}>
 				<RotateCw className='size-4' />
@@ -257,7 +257,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 		<div className='relative flex h-full flex-col overflow-hidden'>
 			{imageToolbar}
 
-			<div className='ocr-panel-toolbar flex h-14 shrink-0 items-center justify-between gap-4 px-5'>
+			<div className='ios-glass-toolbar flex h-12 shrink-0 items-center justify-between gap-4 px-5'>
 				<div className='flex min-w-0 items-center gap-3'>
 					<span
 						className={cn(
@@ -271,27 +271,27 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 						)}
 					</span>
 					<div className='min-w-0'>
-						<p className='truncate text-[13px] font-semibold text-slate-950'>
+						<p className='truncate text-[13px] font-semibold text-[#0d0d12]'>
 							{file.name}
 						</p>
-						<p className='mt-0.5 text-[11px] text-slate-500'>
+						<p className='mt-0.5 text-[11px] text-[#8e8e96]'>
 							{formatFileSize(file.size)} · {isPdfFile ? 'PDF' : 'Image'}
 						</p>
 					</div>
 				</div>
 				<div className='flex shrink-0 items-center gap-2'>
-					<span className='ocr-pill h-8 px-3 text-[11px] font-medium text-slate-600'>
+					<span className='ios-pill h-8 px-3 text-[11px] font-medium text-[#54545c]'>
 						<LocateFixed className='size-3.5 text-blue-500' />
 						{activeBlock?.layoutType || '预览'}
 					</span>
 					<span
 						className={cn(
-							'ocr-pill h-8 px-3 text-[11px] font-medium',
+							'ios-pill h-8 px-3 text-[11px] font-medium',
 							result?.status === 'completed'
 								? 'text-emerald-700'
 								: result?.status === 'failed'
 									? 'text-red-700'
-									: 'text-slate-600'
+									: 'text-[#54545c]'
 						)}>
 						{result?.status === 'completed'
 							? '已完成'
@@ -321,7 +321,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 				) : isImageFile && pdfUrl ? (
 					<div
 						className={cn(
-							'ocr-scrollbar relative flex h-full cursor-pointer items-center justify-center overflow-auto bg-[linear-gradient(135deg,rgba(248,250,252,0.84),rgba(239,246,255,0.66))] p-6',
+							'ios-scrollbar relative flex h-full cursor-pointer items-center justify-center overflow-auto bg-[linear-gradient(135deg,rgba(248,250,252,0.84),rgba(239,246,255,0.66))] p-6',
 							imageZoom > 1 && 'cursor-grab'
 						)}
 						onClick={handleImageClick}
@@ -331,7 +331,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 							ref={imageRef}
 							src={pdfUrl}
 							alt={file.name}
-							className='max-h-full max-w-full rounded-[18px] object-contain shadow-2xl shadow-slate-950/10 ring-1 ring-white/80 transition-transform duration-200 ease-out'
+							className='max-h-full max-w-full rounded-[18px] object-contain shadow-2xl shadow-black/5 ring-1 ring-white/80 transition-transform duration-200 ease-out'
 							style={{
 								transform: `scale(${imageZoom}) rotate(${imageRotation}deg)`,
 								transformOrigin: 'center center'
@@ -353,7 +353,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 						)}
 					</div>
 				) : (
-					<div className='flex h-full items-center justify-center bg-slate-50/70 text-sm text-slate-500'>
+					<div className='flex h-full items-center justify-center bg-[#fafbfd] text-sm text-[#8e8e96]'>
 						<p>不支持的文件格式</p>
 					</div>
 				)}

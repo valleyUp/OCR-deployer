@@ -1,14 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
 	Check,
-	ClipboardPaste,
 	Clock,
-	FileStack,
 	FileText,
-	ImageUp,
 	Loader2,
 	Sigma,
-	Sparkles,
 	UploadCloud
 } from 'lucide-react'
 import { cn } from '@/libs/utils'
@@ -87,8 +83,8 @@ const MODE_OPTIONS: {
 	hint: string
 	icon: typeof FileText
 }[] = [
-	{ id: 'pipeline', label: '文档 OCR', hint: 'Markdown + bbox', icon: FileText },
-	{ id: 'formula', label: '公式识别', hint: 'LaTeX / MML / UM', icon: Sigma }
+	{ id: 'pipeline', label: '文档 OCR', hint: '版面还原', icon: FileText },
+	{ id: 'formula', label: '公式识别', hint: 'LaTeX / MML', icon: Sigma }
 ]
 
 const inferMimeTypeByName = (name: string): string => {
@@ -281,8 +277,6 @@ export function FileUpload({
 		await upsertHistory(baseRecord)
 		onActiveTaskChange(localId)
 
-		// Provide the real File reference for the preview pane while the
-		// task is still processing (history records cannot hold File objects).
 		const now = new Date()
 		onFileReady?.({
 			id: localId,
@@ -372,25 +366,29 @@ export function FileUpload({
 		r => r.status === 'pending' || r.status === 'processing'
 	).length
 
+	/* Compute segment thumb position for spring-animated sliding pill */
+	const modeIndex = processingMode === 'formula' ? 1 : 0
+	const segmentThumbStyle = {
+		left: modeIndex === 0 ? '3px' : 'calc(50% + 1.5px)',
+		width: 'calc(50% - 4.5px)'
+	}
+
 	return (
 		<div className='flex shrink-0 flex-col'>
-			<div className='flex flex-col gap-4 p-4'>
-				<div className='flex items-start justify-between gap-3'>
-					<div>
-						<h2 className='text-[15px] font-semibold tracking-tight text-slate-950'>
-							新建任务
-						</h2>
-						<p className='mt-0.5 text-[11px] text-slate-500'>
-							上传文件或粘贴剪贴板图片
-						</p>
-					</div>
-					<span className='ocr-pill h-7 px-2.5 text-[11px] font-medium text-slate-500'>
-						<FileStack className='size-3.5 text-blue-500' />
-						{historyRecords.length}
-					</span>
+			<div className='flex flex-col gap-4 p-5'>
+				{/* Heading */}
+				<div>
+					<h2 className='text-[20px] font-semibold tracking-tight text-[#0d0d12]'>
+						新建任务
+					</h2>
+					<p className='mt-0.5 text-[12px] text-[#8e8e96]'>
+						拖拽文件、点击或粘贴
+					</p>
 				</div>
 
-				<div className='ocr-segment'>
+				{/* Segmented control — sliding pill with spring physics */}
+				<div className='ios-segment'>
+					<div className='ios-segment-thumb' style={segmentThumbStyle} />
 					{MODE_OPTIONS.map(option => {
 						const active = processingMode === option.id
 						const Icon = option.icon
@@ -400,85 +398,58 @@ export function FileUpload({
 								type='button'
 								aria-pressed={active}
 								onClick={() => setProcessingMode(option.id)}
-								className={cn(
-									'flex min-h-16 flex-col items-center justify-center gap-1 rounded-full px-2.5 text-center transition-[background-color,color,box-shadow,transform] duration-200',
-									active
-										? 'bg-white text-slate-950 shadow-sm ring-1 ring-white/90'
-										: 'text-slate-500 hover:text-slate-900'
-								)}>
-								<span className='flex items-center gap-1.5 text-[13px] font-semibold'>
-									<Icon
-										className={cn(
-											'size-4',
-											active && option.id === 'formula' && 'text-violet-500',
-											active && option.id === 'pipeline' && 'text-blue-500'
-										)}
-									/>
-									{option.label}
-								</span>
-								<span className='text-[10px] font-medium text-slate-500'>
-									{option.hint}
-								</span>
+								className='ios-segment-btn'>
+								<Icon
+									className={cn(
+										'size-4 transition-colors duration-260',
+										active && option.id === 'formula' && 'text-violet-500',
+										active && option.id === 'pipeline' && 'text-blue-500'
+									)}
+								/>
+								<span>{option.label}</span>
+								<span className='ios-segment-hint'>{option.hint}</span>
 							</button>
 						)
 					})}
 				</div>
 
+				{/* Drop zone */}
 				<div
 					className={cn(
-						'ocr-drop-zone cursor-pointer rounded-[22px] px-4 py-6 text-center',
-						processingMode === 'formula' && 'ocr-active-glow'
+						'ios-drop',
+						isDragging && 'is-drag'
 					)}
-					data-active={isDragging ? 'true' : 'false'}
 					onDragOver={handleDragOver}
 					onDragLeave={handleDragLeave}
 					onDrop={handleDrop}
 					onClick={() => fileInputRef.current?.click()}>
-					<div className='relative flex flex-col items-center gap-3'>
-						<span
+					<div className='ios-drop-icon'>
+						<UploadCloud
 							className={cn(
-								'flex size-14 items-center justify-center rounded-2xl transition-colors duration-200',
-								isDragging
-									? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
-									: processingMode === 'formula'
-										? 'bg-violet-100 text-violet-600'
-										: 'bg-blue-100 text-blue-600'
-							)}>
-							<UploadCloud
-								className={cn(
-									'size-6',
-									isDragging && 'motion-safe:animate-bounce'
-								)}
-							/>
-						</span>
-						<div className='space-y-1'>
-							<p className='text-[14px] font-semibold text-slate-950'>
-								{isDragging ? '松手上传文件' : '点击或拖拽到此处'}
-							</p>
-							<p className='text-[11px] text-slate-500'>
-								{processingMode === 'formula'
-									? '公式任务会优先筛选 equation 结果'
-									: '文档任务保留版面、文本与图片块'}
-							</p>
-						</div>
-						<div className='flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-medium text-slate-500'>
-							<span className='ocr-pill px-2 py-1'>
-								<ImageUp className='size-3 text-cyan-500' />
-								PNG/JPG/PDF
-							</span>
-							<span className='ocr-pill px-2 py-1'>
-								<Sparkles className='size-3 text-violet-500' />
-								最大 {maxUploadMb} MB
-							</span>
-						</div>
-						<p className='flex items-center justify-center gap-1 text-[11px] text-slate-500'>
-							<ClipboardPaste className='size-3.5 text-slate-400' />
-							或按 <kbd>⌘</kbd>
-							<span className='text-slate-400'>/</span>
-							<kbd>Ctrl</kbd>
-							<kbd>V</kbd> 粘贴图片
-						</p>
+								'size-6 transition-transform duration-320',
+								isDragging && 'motion-safe:animate-bounce'
+							)}
+						/>
 					</div>
+					<p className='text-[15px] font-medium text-[#0d0d12]'>
+						{isDragging ? '松手上传' : '拖拽或点击上传'}
+					</p>
+					<p className='mt-1 text-[12px] text-[#8e8e96]'>
+						{processingMode === 'formula'
+							? '识别公式，输出 LaTeX / MathML'
+							: '版面还原，输出 Markdown + bbox'}
+					</p>
+					<div className='mt-3 flex flex-wrap items-center justify-center gap-3 text-[11px] text-[#8e8e96]'>
+						<span className='ios-pill px-2.5 py-0.5 text-[11px]'>PNG · JPG · PDF</span>
+						<span className='ios-pill px-2.5 py-0.5 text-[11px]'>最大 {maxUploadMb} MB</span>
+					</div>
+					<p className='mt-3 flex items-center justify-center gap-1 text-[11px] text-[#8e8e96]'>
+						<kbd>⌘</kbd>
+						<span>/</span>
+						<kbd>Ctrl</kbd>
+						<kbd>V</kbd>
+						<span className='ml-1'>粘贴图片</span>
+					</p>
 				</div>
 
 				<input
@@ -491,28 +462,29 @@ export function FileUpload({
 				/>
 
 				{pendingCount > 0 && (
-					<div className='flex items-center justify-between rounded-full border border-blue-200/70 bg-blue-50/80 px-3 py-2 text-[11px] font-medium text-blue-700'>
+					<div className='flex items-center justify-between rounded-full border border-[rgba(0,113,227,0.18)] bg-[rgba(0,113,227,0.06)] px-3 py-2 text-[12px] font-medium text-[#0071e3]'>
 						<span>{pendingCount} 个任务处理中</span>
 						<Loader2 className='size-3.5 animate-spin' />
 					</div>
 				)}
 			</div>
 
+			{/* Pipeline timeline — springs in when active */}
 			{showTimeline && activeRecord && (
-				<div className='ocr-card-enter ocr-scan-card mx-4 mb-4 rounded-2xl border border-white/70 bg-white/70 p-3 shadow-sm'>
-					<div className='mb-3 flex items-center justify-between gap-2'>
-						<div className='flex min-w-0 items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500'>
-							<Clock className='size-3.5 text-blue-500' />
-							<span className='truncate'>{activeRecord.currentStage || '排队中'}</span>
-						</div>
-						<span className='rounded-full bg-slate-950/5 px-2 py-0.5 text-[10px] font-semibold text-slate-500'>
+				<div className='mx-5 mb-5 rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white/70 p-4 shadow-sm'>
+					<div className='mb-3 flex items-center justify-between'>
+						<span className='flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8e8e96]'>
+							<span className='size-1.5 rounded-full bg-[#0071e3] shadow-[0_0_0_3px_rgba(0,113,227,0.2)]' />
+							{activeRecord.currentStage || '排队中'}
+						</span>
+						<span className='text-[11px] font-medium tabular-nums text-[#8e8e96]'>
 							{Math.round(activeRecord.progress ?? 0)}%
 						</span>
 					</div>
-					<div className='mb-3 h-1.5 overflow-hidden rounded-full bg-slate-200/80'>
+					<div className='ios-progress mb-3'>
 						<div
-							className='h-full rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-400 transition-[width] duration-500'
-							style={{ width: `${Math.max(4, activeRecord.progress ?? stageIndex * 28)}%` }}
+							className='ios-progress-bar'
+							style={{ width: `${Math.max(6, activeRecord.progress ?? stageIndex * 28)}%` }}
 						/>
 					</div>
 					<ol className='space-y-2.5'>
@@ -524,15 +496,22 @@ export function FileUpload({
 										? 'active'
 										: 'idle'
 							return (
-								<li key={step.id} className='flex items-center gap-2'>
+								<li key={step.id} className='flex items-center gap-2.5'>
 									<span
 										className={cn(
-											'flex size-5 items-center justify-center rounded-full transition-colors duration-200',
-											state === 'done' && 'bg-emerald-500 text-white',
+											'flex size-[18px] items-center justify-center rounded-full text-[10px] transition-all duration-300',
+											state === 'done' &&
+												'bg-emerald-500 text-white',
 											state === 'active' &&
-												'bg-blue-600 text-white shadow-lg shadow-blue-500/20 motion-safe:animate-pulse',
-											state === 'idle' && 'bg-slate-200 text-slate-500'
-										)}>
+												'bg-[#0071e3] text-white shadow-[0_0_0_4px_rgba(0,113,227,0.16)]',
+											state === 'idle' &&
+												'bg-[rgba(0,0,0,0.06)] text-[#8e8e96]'
+										)}
+										style={
+											state === 'active'
+												? { animation: 'ios-pulse 2s ease-in-out infinite' }
+												: undefined
+										}>
 										{state === 'done' ? (
 											<Check className='size-2.5' />
 										) : (
@@ -541,8 +520,10 @@ export function FileUpload({
 									</span>
 									<span
 										className={cn(
-											'text-[12px] font-medium',
-											state === 'idle' ? 'text-slate-500' : 'text-slate-900'
+											'text-[12.5px] transition-colors duration-300',
+											state === 'idle'
+												? 'text-[#8e8e96]'
+												: 'text-[#0d0d12] font-medium'
 										)}>
 										{step.label}
 									</span>

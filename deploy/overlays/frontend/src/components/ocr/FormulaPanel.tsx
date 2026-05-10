@@ -123,7 +123,7 @@ function FormulaPreview({ latex }: { latex: string }) {
 	)
 	return (
 		<div
-			className='ocr-formula-preview overflow-auto rounded-2xl border border-white/80 px-4 py-4 text-zinc-900 shadow-inner'
+			className='ocr-formula-preview overflow-auto rounded-2xl border border-[rgba(0,0,0,0.08)] px-4 py-4 text-[#0d0d12] shadow-inner'
 			dangerouslySetInnerHTML={{ __html: markup }}
 		/>
 	)
@@ -176,7 +176,7 @@ function ExportMenu({ taskId, disabled }: ExportMenuProps) {
 			<Button
 				variant='outline'
 				size='sm'
-				className='h-8 gap-1.5 rounded-full border-white/80 bg-white/80 px-3 text-[12px] font-semibold text-slate-700 shadow-sm hover:bg-white'
+				className='h-8 gap-1.5 rounded-full border-[rgba(0,0,0,0.08)] bg-white/80 px-3 text-[12px] font-semibold text-[#54545c] shadow-sm hover:bg-white'
 				disabled={disabled || !taskId}
 				onClick={() => setOpen(value => !value)}
 				aria-haspopup='menu'
@@ -193,7 +193,7 @@ function ExportMenu({ taskId, disabled }: ExportMenuProps) {
 			{open && (
 				<div
 					role='menu'
-					className='absolute right-0 z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-white/70 bg-white/95 p-1 shadow-2xl shadow-slate-900/10 backdrop-blur-xl motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150'>
+					className='absolute right-0 z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white/95 p-1 shadow-2xl shadow-black/5 backdrop-blur-xl motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150'>
 					{EXPORT_PRESETS.map(preset => {
 						const isBusy = busyKey === preset.key
 						return (
@@ -203,10 +203,10 @@ function ExportMenu({ taskId, disabled }: ExportMenuProps) {
 								role='menuitem'
 								disabled={busyKey !== null}
 								onClick={() => void runExport(preset)}
-								className='flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition-colors duration-150 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60'>
+								className='flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm text-[#54545c] transition-colors duration-150 hover:bg-[rgba(0,0,0,0.04)] disabled:cursor-not-allowed disabled:opacity-60'>
 								<span className='flex items-center gap-2'>
 									{isBusy && <Loader2 className='size-3.5 animate-spin text-primary' />}
-									<span className={cn(isBusy && 'text-muted-foreground')}>
+									<span className={cn(isBusy && 'text-[#8e8e96]')}>
 										{preset.label}
 									</span>
 								</span>
@@ -397,7 +397,7 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 	if (!formulas.length) {
 		return (
 			<div className='flex h-full items-center justify-center bg-[linear-gradient(180deg,rgba(255,255,255,0.66),rgba(248,250,252,0.72))]'>
-				<div className='rounded-3xl border border-dashed border-slate-300/80 bg-white/60 p-6 text-center text-sm text-slate-500'>
+				<div className='rounded-3xl border border-dashed border-[rgba(0,0,0,0.10)] bg-white/60 p-6 text-center text-sm text-[#8e8e96]'>
 					<Sigma className='mx-auto mb-2 size-7 text-violet-400' />
 					<p className='font-medium'>暂无公式</p>
 				</div>
@@ -411,19 +411,19 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 			tabIndex={0}
 			onKeyDown={handleKeyDown}
 			className='flex h-full flex-col overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.64),rgba(248,250,252,0.72))] outline-none'>
-			<div className='ocr-panel-toolbar sticky top-0 z-10 flex flex-col gap-2 px-4 py-3'>
+			<div className='ios-glass-toolbar sticky top-0 z-10 flex flex-col gap-2 px-4 py-3'>
 				<div className='flex items-center justify-between gap-3'>
-					<div className='flex items-center gap-2 text-sm font-semibold text-slate-950'>
+					<div className='flex items-center gap-2 text-sm font-semibold text-[#0d0d12]'>
 						<span className='flex size-8 items-center justify-center rounded-2xl bg-violet-100 text-violet-600'>
 							<Sigma className='size-4' />
 						</span>
 						<div>
 							<p>
 								{filtered.length}
-								<span className='text-slate-400'> / {formulas.length}</span>
-								<span className='ml-1 text-slate-500'>个公式</span>
+								<span className='text-[#8e8e96]'> / {formulas.length}</span>
+								<span className='ml-1 text-[#8e8e96]'>个公式</span>
 							</p>
-							<p className='mt-0.5 text-[10px] font-medium text-slate-500'>
+							<p className='mt-0.5 text-[10px] font-medium text-[#8e8e96]'>
 								支持 LaTeX / MathML / PNG 导出
 							</p>
 						</div>
@@ -431,29 +431,29 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 					<ExportMenu taskId={taskId} />
 				</div>
 				<div className='relative'>
-					<Search className='pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400' />
+					<Search className='pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#8e8e96]' />
 					<input
 						type='text'
 						value={query}
 						placeholder='搜索 LaTeX 或 ID'
 						onChange={event => setQuery(event.target.value)}
-						className='h-9 w-full rounded-full border border-white/80 bg-white/80 pl-9 pr-8 text-[12px] text-slate-900 shadow-inner outline-none transition-colors duration-150 placeholder:text-slate-400 focus-visible:border-blue-400'
+						className='h-9 w-full rounded-full border border-[rgba(0,0,0,0.08)] bg-white/80 pl-9 pr-8 text-[12px] text-[#0d0d12] shadow-inner outline-none transition-colors duration-150 placeholder:text-[#8e8e96] focus-visible:border-blue-400'
 					/>
 					{query && (
 						<button
 							type='button'
 							aria-label='清空搜索'
 							onClick={() => setQuery('')}
-							className='absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-900'>
+							className='absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-[#8e8e96] hover:bg-[rgba(0,0,0,0.04)] hover:text-[#0d0d12]'>
 							<X className='size-3' />
 						</button>
 					)}
 				</div>
 			</div>
 
-			<div className='ocr-scrollbar flex-1 overflow-auto'>
+			<div className='ios-scrollbar flex-1 overflow-auto'>
 				{filtered.length === 0 ? (
-					<div className='flex h-full items-center justify-center px-6 text-center text-sm text-slate-500'>
+					<div className='flex h-full items-center justify-center px-6 text-center text-sm text-[#8e8e96]'>
 						<p>没有匹配 "{query}" 的公式</p>
 					</div>
 				) : (
@@ -473,7 +473,7 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 										'ocr-card-enter group relative rounded-3xl border px-4 py-4 transition-[background-color,border-color,box-shadow,transform] duration-200',
 										isSelected
 											? 'border-violet-300 bg-white/90 shadow-xl shadow-violet-500/10 ring-1 ring-violet-300/50'
-											: 'border-white/70 bg-white/70 shadow-sm hover:-translate-y-0.5 hover:border-blue-200 hover:bg-white/90 hover:shadow-lg'
+											: 'border-[rgba(0,0,0,0.06)] bg-white/70 shadow-sm hover:-translate-y-0.5 hover:border-blue-200 hover:bg-white/90 hover:shadow-lg'
 									)}
 									onMouseEnter={() => {
 										activateFormula(formula)
@@ -491,7 +491,7 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 												className='h-5 rounded-full border-violet-200 bg-violet-50 px-2 text-[10px] font-semibold text-violet-700'>
 												P{formula.page_index}
 											</Badge>
-											<span className='max-w-[9rem] truncate font-mono text-[11px] text-slate-500'>
+											<span className='max-w-[9rem] truncate font-mono text-[11px] text-[#8e8e96]'>
 												{formula.formula_id}
 											</span>
 										</div>
@@ -541,7 +541,7 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 														event.stopPropagation()
 														void downloadFormula(formula, item.format)
 													}}
-													className='h-7 gap-1 rounded-full border-white/80 bg-white/80 px-2.5 text-[11px] font-semibold text-slate-600 shadow-sm hover:bg-white'>
+													className='h-7 gap-1 rounded-full border-[rgba(0,0,0,0.08)] bg-white/80 px-2.5 text-[11px] font-semibold text-[#54545c] shadow-sm hover:bg-white'>
 													{justDownloaded ? (
 														<Check className='size-3.5 text-emerald-600' />
 													) : isBusy ? (

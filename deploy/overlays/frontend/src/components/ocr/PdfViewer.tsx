@@ -262,7 +262,7 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
                         setTimeout(() => handlePageRenderSuccess(pageNumber, el), 0);
                     }
                 }}
-                className={`relative mb-6 mx-auto rounded-[16px] bg-white shadow-2xl shadow-slate-950/10 ring-1 ring-slate-200/80`}
+                className={`relative mb-6 mx-auto rounded-[16px] bg-white shadow-2xl shadow-black/5 ring-1 ring-[rgba(0,0,0,0.08)]`}
                 style={{ minHeight: numPages > 1 ? height * scale : 'auto', width: 'fit-content' }}
                 data-pdf-page={pageNumber}
                 data-pdf-visible
@@ -302,14 +302,14 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
     return (
         <div className={`pdf-viewer flex flex-col h-full overflow-hidden ${className}`}>
             {/* 工具栏：缩放 + 翻页 */}
-            <div className="toolbar ocr-panel-toolbar sticky top-0 z-10 grid grid-cols-2 gap-4 px-4 py-2 xl:grid-cols-3">
-                <div className='hidden min-w-0 text-nowrap truncate text-[12px] font-medium text-slate-500 xl:block'>{file?.name || 'PDF 文件预览'}</div>
+            <div className="toolbar ios-glass-toolbar sticky top-0 z-10 grid grid-cols-2 gap-4 px-4 py-2 xl:grid-cols-3">
+                <div className='hidden min-w-0 text-nowrap truncate text-[12px] font-medium text-[#8e8e96] xl:block'>{file?.name || 'PDF 文件预览'}</div>
                 <div className="flex items-center justify-center gap-3">
 
                     <button
                         onClick={prevPage}
                         disabled={currentPage <= 1}
-                        className="ocr-icon-button size-8 cursor-pointer"
+                        className="ios-btn-icon size-8 cursor-pointer"
                     >
                         <ChevronLeft size={20} strokeWidth={1} />
                     </button>
@@ -328,16 +328,16 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
                                     e.currentTarget.blur();
                                 }
                             }}
-                            className="h-7 w-12 rounded-full border border-slate-200 bg-white/80 text-center text-[12px] font-medium shadow-inner"
+                            className="h-7 w-12 rounded-full border border-[rgba(0,0,0,0.08)] bg-white/80 text-center text-[12px] font-medium shadow-inner"
                         />
-                        <span className="text-sm text-slate-400">/</span>
-                        <span className="text-sm text-slate-500">{numPages || '?'}</span>
+                        <span className="text-sm text-[#8e8e96]">/</span>
+                        <span className="text-sm text-[#8e8e96]">{numPages || '?'}</span>
                     </div>
 
                     <button
                         onClick={nextPage}
                         disabled={currentPage >= numPages}
-                        className="ocr-icon-button size-8 cursor-pointer"
+                        className="ios-btn-icon size-8 cursor-pointer"
                     >
                         <ChevronRight size={20} strokeWidth={1} />
                     </button>
@@ -345,26 +345,26 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
                 </div>
 
                 <div className="flex items-center justify-end gap-3">
-                    <button onClick={zoomOut} className="ocr-icon-button size-8 cursor-pointer">
+                    <button onClick={zoomOut} className="ios-btn-icon size-8 cursor-pointer">
                         <ZoomOut size={20} strokeWidth={1} />
                     </button>
-                    <span className="w-10 text-center text-sm tabular-nums text-slate-500">{Math.round(scale * 100)}%</span>
-                    <button onClick={zoomIn} className="ocr-icon-button size-8 cursor-pointer">
+                    <span className="w-10 text-center text-sm tabular-nums text-[#8e8e96]">{Math.round(scale * 100)}%</span>
+                    <button onClick={zoomIn} className="ios-btn-icon size-8 cursor-pointer">
                         <ZoomIn size={20} strokeWidth={1} />
                     </button>
-                    <button onClick={resetZoom} className="ocr-icon-button size-8 cursor-pointer">
+                    <button onClick={resetZoom} className="ios-btn-icon size-8 cursor-pointer">
                         <RotateCcw size={18} strokeWidth={1} />
                     </button>
                 </div>
             </div>
 
             {/* 滚动容器 - 虚拟渲染 */}
-            <div ref={scrollContainerRef} className="ocr-scrollbar pdf-scroll-container relative flex-1 overflow-auto bg-[linear-gradient(135deg,rgba(248,250,252,0.86),rgba(239,246,255,0.7))] p-6">
+            <div ref={scrollContainerRef} className="ios-scrollbar pdf-scroll-container relative flex-1 overflow-auto bg-[linear-gradient(135deg,rgba(248,250,252,0.86),rgba(239,246,255,0.7))] p-6">
                 <Document
                     file={file}
                     options={documentOptions}
                     onLoadSuccess={onDocumentLoadSuccess}
-                    loading={<div className="py-20 text-center text-sm text-slate-500">正在加载 PDF...</div>}
+                    loading={<div className="py-20 text-center text-sm text-[#8e8e96]">正在加载 PDF...</div>}
                     error={<div className="py-20 text-center text-sm text-red-600">PDF 加载失败，请检查文件</div>}
                 >
                     {numPages > 0 && (

@@ -11,9 +11,9 @@ import type { HistoryRecord } from '@/libs/historyDb'
 import '@/styles-overlay.css'
 
 const RESULTS_WIDTH_KEY = 'ocr-deployer:resultsWidth'
-const RESULTS_WIDTH_DEFAULT = 420
+const RESULTS_WIDTH_DEFAULT = 460
 const RESULTS_WIDTH_MIN = 340
-const RESULTS_WIDTH_MAX = 760
+const RESULTS_WIDTH_MAX = 860
 
 function readStoredWidth(): number {
 	if (typeof window === 'undefined') return RESULTS_WIDTH_DEFAULT
@@ -58,9 +58,6 @@ export function OCRPage() {
 	const [currentLocalId, setCurrentLocalId] = useState<string | null>(null)
 	const [resultsWidth, setResultsWidth] = useState<number>(RESULTS_WIDTH_DEFAULT)
 
-	// Live uploads have real File references that cannot be serialised
-	// into history. Keep a side-map so FilePreview can render before the
-	// task completes.
 	const liveFilesRef = useRef<Map<string, UploadedFile>>(new Map())
 	const [, setLiveFilesVersion] = useState(0)
 
@@ -111,48 +108,51 @@ export function OCRPage() {
 	}
 
 	return (
-		<div className='ocr-app-shell flex h-screen flex-col overflow-hidden p-3'>
-			<div className='ocr-window flex min-h-0 flex-1 flex-col overflow-hidden'>
-				<AppHeader uploadFile={uploadFile} result={parsedResult} />
+		<div className='ios-shell bg-[#f2f4f7]'>
+			{/* Outer padding gives the window a floating appearance */}
+			<div className='ios-window p-2'>
+				<div className='ios-glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px]'>
+					<AppHeader uploadFile={uploadFile} result={parsedResult} />
 
-				<div className='flex min-h-0 flex-1 gap-3 overflow-hidden p-3 pt-0'>
-					<aside className='ocr-glass-panel flex w-[286px] shrink-0 flex-col overflow-hidden'>
-						<FileUpload
-							currentLocalId={currentLocalId}
-							onActiveTaskChange={localId => {
-								setCurrentLocalId(localId)
-							}}
-							onFileReady={handleFileReady}
-						/>
-						<HistoryPanel
-							currentLocalId={currentLocalId}
-							onSelect={record => setCurrentLocalId(record.localId)}
-						/>
-					</aside>
+					{/* Main three-column layout */}
+					<div className='flex min-h-0 flex-1 overflow-hidden'>
+						{/* Sidebar */}
+						<aside className='ios-glass-sidebar flex w-[272px] shrink-0 flex-col overflow-hidden rounded-bl-[22px]'>
+							<FileUpload
+								currentLocalId={currentLocalId}
+								onActiveTaskChange={localId => setCurrentLocalId(localId)}
+								onFileReady={handleFileReady}
+							/>
+							<HistoryPanel
+								currentLocalId={currentLocalId}
+								onSelect={record => setCurrentLocalId(record.localId)}
+							/>
+						</aside>
 
-					<main className='flex min-w-0 flex-1 overflow-hidden'>
-						<section className='ocr-glass-panel flex min-w-0 flex-1 flex-col overflow-hidden'>
-							<FilePreview file={uploadFile} result={parsedResult} />
-						</section>
+						{/* Preview + Results */}
+						<main className='flex min-w-0 flex-1 overflow-hidden'>
+							<section className='flex min-w-0 flex-1 flex-col overflow-hidden'>
+								<FilePreview file={uploadFile} result={parsedResult} />
+							</section>
 
-						<ResizableDivider
-							value={resultsWidth}
-							onChange={setResultsWidth}
-							onCommit={persistResultsWidth}
-							onReset={resetResultsWidth}
-							min={RESULTS_WIDTH_MIN}
-							max={RESULTS_WIDTH_MAX}
-							direction='right'
-							ariaLabel='调整结果区宽度'
-							className='mx-1'
-						/>
+							<ResizableDivider
+								value={resultsWidth}
+								onChange={setResultsWidth}
+								onCommit={persistResultsWidth}
+								onReset={resetResultsWidth}
+								min={RESULTS_WIDTH_MIN}
+								max={RESULTS_WIDTH_MAX}
+								direction='right'
+								ariaLabel='调整结果区宽度'
+							/>
 
-						<section
-							className='ocr-glass-panel flex shrink-0 flex-col overflow-hidden'
-							style={{ width: `${resultsWidth}px` }}>
-							<OCRResults result={parsedResult} fileName={uploadFile?.name} />
-						</section>
-					</main>
+							<section
+								className='flex shrink-0 flex-col overflow-hidden border-l border-[rgba(0,0,0,0.06)]'
+								style={{ width: `${resultsWidth}px` }}>
+								<OCRResults result={parsedResult} fileName={uploadFile?.name} />
+							</section>
+						</main>
+					</div>
 				</div>
 			</div>
 		</div>

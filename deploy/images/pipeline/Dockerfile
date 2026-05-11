@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY upstream/glm-ocr/pyproject.toml upstream/glm-ocr/README.md ./
 COPY upstream/glm-ocr/glmocr ./glmocr
 COPY upstream/glm-ocr/resources ./resources
+RUN cp glmocr/server.py glmocr/_upstream_server.py
 COPY deploy/overlays/pipeline/ ./
 
 RUN pip config set global.index-url "${PYPI_INDEX_URL}" && \

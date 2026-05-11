@@ -36,6 +36,15 @@ FORMULA_CONTENT_LAYOUT_TYPES = {
     "isolated_formula",
     "inline_formula",
 }
+DISPLAY_FORMULA_CONTENT_LAYOUT_TYPES = {
+    "formula",
+    "equation",
+    "isolated_formula",
+    "display_formula",
+}
+INLINE_FORMULA_LAYOUT_TYPES = {
+    "inline_formula",
+}
 FORMULA_NUMBER_LAYOUT_TYPES = {
     "formula_number",
     "equation_number",
@@ -52,6 +61,14 @@ FORMULA_FORMATS = {
 }
 MATH_PATTERN = re.compile(
     r"(\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)|(?<!\$)\$[^$]+\$(?!\$)|\\begin\{[^}]+\}.*?\\end\{[^}]+\})",
+    re.DOTALL,
+)
+DISPLAY_MATH_PATTERN = re.compile(
+    r"(\$\$.*?\$\$|\\\[.*?\\\]|\\begin\{[^}]+\}.*?\\end\{[^}]+\})",
+    re.DOTALL,
+)
+INLINE_MATH_FULL_PATTERN = re.compile(
+    r"(\\\(.*?\\\)|(?<!\$)\$[^$]+\$(?!\$))",
     re.DOTALL,
 )
 
@@ -154,6 +171,21 @@ def is_explicit_formula_layout(layout_type: Any) -> bool:
     return False
 
 
+def is_display_formula_layout(layout_type: Any) -> bool:
+    label = _normalized_layout_type(layout_type)
+    if not label or label in INLINE_FORMULA_LAYOUT_TYPES:
+        return False
+    if label in DISPLAY_FORMULA_CONTENT_LAYOUT_TYPES:
+        return True
+    if "inline" in label:
+        return False
+    if "equation" in label:
+        return "number" not in label
+    if "formula" in label:
+        return "number" not in label
+    return False
+
+
 def is_formula_number_layout(layout_type: Any) -> bool:
     label = _normalized_layout_type(layout_type)
     return label in FORMULA_NUMBER_LAYOUT_TYPES or (
@@ -174,15 +206,41 @@ def is_formula_only_content(content: Any) -> bool:
     return bool(re.fullmatch(r"\\[A-Za-z]+(?:\s|[{_^\[]|$)[\s\S]*", text))
 
 
+def is_display_formula_only_content(content: Any) -> bool:
+    text = "" if content is None else str(content).strip()
+    if not text:
+        return False
+    if DISPLAY_MATH_PATTERN.fullmatch(text):
+        return True
+    if INLINE_MATH_FULL_PATTERN.fullmatch(text):
+        return False
+    if MATH_PATTERN.search(text):
+        return False
+    prose_marker = r"\b(where|when|if|for|and|is|are|defined|inline)\b"
+    if re.search(prose_marker, text.lower()):
+        return False
+    display_operator = (
+        r"(\\(begin|frac|sum|prod|int|iint|iiint|lim|sqrt|left|right|tag)\b|[=^_])"
+    )
+    return bool(
+        re.search(
+            display_operator,
+            text,
+        )
+    )
+
+
 def should_keep_formula_mode_block(layout_type: Any, content: Any) -> bool:
-    if is_explicit_formula_layout(layout_type):
-        return bool(normalize_latex(content))
     if is_formula_number_layout(layout_type):
         return False
+    if is_display_formula_layout(layout_type):
+        return bool(normalize_latex(content))
+    if _normalized_layout_type(layout_type) in INLINE_FORMULA_LAYOUT_TYPES:
+        return False
     # Some OCR endpoints omit labels in formula-only mode. Accept only pure
-    # formula text, not prose containing an inline equation.
+    # display formula text, not prose containing an inline equation.
     if not _normalized_layout_type(layout_type):
-        return is_formula_only_content(content)
+        return is_display_formula_only_content(content)
     return False
 
 

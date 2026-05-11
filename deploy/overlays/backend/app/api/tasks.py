@@ -25,6 +25,13 @@ from app.services.formula_service import (
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 SUPPORTED_PROCESSING_MODES = {"pipeline", "formula"}
+FORMULA_MODE_PROMPT = (
+    "Extract only display or block mathematical equations that occupy their own "
+    "line or a standalone formula region. Return LaTeX for those display "
+    "equations only. Do not extract inline mathematical symbols or formulas "
+    "embedded inside prose paragraphs. Ignore standalone formula numbers unless "
+    "they are attached to a display equation."
+)
 
 
 async def _get_task_info_or_404(task_id: str) -> dict:
@@ -99,7 +106,7 @@ async def submit_task(
             parsed_ocr_config = parsed_ocr_config or {}
             parsed_ocr_config.setdefault(
                 "prompt",
-                "Extract mathematical formulas and return LaTeX only for formula regions.",
+                FORMULA_MODE_PROMPT,
             )
 
         # 保存文件

@@ -55,13 +55,25 @@ def test_extracts_inline_formula_candidates_from_text():
 
 
 def test_formula_mode_filter_keeps_only_formula_layout_blocks():
+    assert should_keep_formula_mode_block("display_formula", r"\[ E = mc^2 \]")
     assert should_keep_formula_mode_block("equation", r"\frac{a}{b}")
     assert should_keep_formula_mode_block("formula", "$$E=mc^2$$")
+    assert not should_keep_formula_mode_block("inline_formula", "$x_i$")
     assert not should_keep_formula_mode_block(
         "text",
         "where $x_i = y_i + 1$ is defined inline",
     )
     assert not should_keep_formula_mode_block("formula_number", "(1)")
+
+
+def test_formula_mode_unlabeled_fallback_rejects_inline_math():
+    assert should_keep_formula_mode_block("", r"\[ E = mc^2 \]")
+    assert should_keep_formula_mode_block("", r"\frac{a}{b}")
+    assert not should_keep_formula_mode_block("", "$x_i$")
+    assert not should_keep_formula_mode_block(
+        "",
+        "where $x_i = y_i + 1$ is defined inline",
+    )
 
 
 def test_render_and_zip_exports_are_format_stable():

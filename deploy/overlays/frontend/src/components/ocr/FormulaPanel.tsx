@@ -10,19 +10,18 @@ import {
 import {
 	Check,
 	ChevronDown,
-	Download,
 	FileArchive,
 	Loader2,
 	Search,
 	Sigma,
-	X
+	X,
+	Copy
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/libs/utils'
 import {
 	exportTaskFormulas,
-	renderFormula,
 	renderFormulaText,
 	type FormulaFormat,
 	type FormulaItem
@@ -37,6 +36,12 @@ interface FormulaPanelProps {
 
 type CopyFormat = 'latex' | 'mathml' | 'unicodemath'
 
+const COPY_SUCCESS: Record<CopyFormat, string> = {
+	latex: 'LaTeX copied',
+	mathml: 'MathML copied',
+	unicodemath: 'UnicodeMath copied'
+}
+
 interface ExportPreset {
 	key: string
 	label: string
@@ -44,23 +49,7 @@ interface ExportPreset {
 	filename: (taskId: string | number) => string
 }
 
-const COPY_LABELS: Record<CopyFormat, string> = {
-	latex: 'LaTeX',
-	mathml: 'MathML',
-	unicodemath: 'UnicodeMath'
-}
 
-const COPY_SUCCESS: Record<CopyFormat, string> = {
-	latex: 'LaTeX 已复制',
-	mathml: 'MathML 已复制',
-	unicodemath: 'UnicodeMath 已复制'
-}
-
-const COPY_SHORTCUT: Record<CopyFormat, string> = {
-	latex: 'C',
-	mathml: 'M',
-	unicodemath: 'U'
-}
 
 const EXPORT_PRESETS: ExportPreset[] = [
 	{
@@ -95,11 +84,7 @@ const EXPORT_PRESETS: ExportPreset[] = [
 	}
 ]
 
-const DOWNLOAD_FORMATS: { format: FormulaFormat; label: string; ext: string; type: string }[] = [
-	{ format: 'latex', label: 'TEX', ext: 'tex', type: 'text/x-tex;charset=utf-8' },
-	{ format: 'mathml', label: 'MML', ext: 'mml', type: 'application/mathml+xml' },
-	{ format: 'png', label: 'PNG', ext: 'png', type: 'image/png' }
-]
+
 
 function saveBlob(blob: Blob, filename: string) {
 	const url = URL.createObjectURL(blob)
@@ -227,9 +212,7 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 	const listRef = useRef<HTMLDivElement>(null)
 	const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 	const [copyBusy, setCopyBusy] = useState<string | null>(null)
-	const [downloadBusy, setDownloadBusy] = useState<string | null>(null)
 	const [copiedKey, setCopiedKey] = useState<string | null>(null)
-	const [downloadedKey, setDownloadedKey] = useState<string | null>(null)
 	const [query, setQuery] = useState('')
 	const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
@@ -328,30 +311,7 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 		[]
 	)
 
-	const downloadFormula = useCallback(async (formula: FormulaItem, format: FormulaFormat) => {
-		const config = DOWNLOAD_FORMATS.find(item => item.format === format)
-		if (!config) return
-		const cardKey = formula.formula_id || `${formula.page_index}-${formula.block_id ?? 'formula'}`
-		const busyKey = `${cardKey}|${format}`
-		setDownloadBusy(busyKey)
-		try {
-			const blob =
-				format === 'latex'
-					? new Blob([formula.latex], { type: config.type })
-					: await renderFormula(formula.latex, format)
-			saveBlob(blob, `${cardKey}.${config.ext}`)
-			toast.success(`${config.label} 已开始下载`)
-			setDownloadedKey(busyKey)
-			window.setTimeout(() => {
-				setDownloadedKey(prev => (prev === busyKey ? null : prev))
-			}, 1200)
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
-			toast.error(`下载失败：${message}`)
-		} finally {
-			setDownloadBusy(null)
-		}
-	}, [])
+
 
 	const handleKeyDown: React.KeyboardEventHandler<HTMLDivElement> = event => {
 		if (!filtered.length) return

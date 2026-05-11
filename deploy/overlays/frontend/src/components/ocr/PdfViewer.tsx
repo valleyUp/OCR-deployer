@@ -8,7 +8,9 @@ import { usePdfZoom } from '@/hooks/usePdfZoom';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 // import 'react-pdf/dist/Page/TextLayer.css';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+const PDFJS_STATIC_BASE = '/pdfjs';
+
+pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS_STATIC_BASE}/pdf.worker.min.mjs`;
 
 
 

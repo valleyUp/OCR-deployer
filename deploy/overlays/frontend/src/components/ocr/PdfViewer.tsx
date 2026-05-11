@@ -8,11 +8,7 @@ import { usePdfZoom } from '@/hooks/usePdfZoom';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 // import 'react-pdf/dist/Page/TextLayer.css';
 
-const PDFJS_STATIC_BASE = '/pdfjs';
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url,
-).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 
 
@@ -305,19 +301,16 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
     return (
         <div className={`pdf-viewer flex flex-col h-full overflow-hidden ${className}`}>
             {/* 工具栏：缩放 + 翻页 */}
-            <div className="toolbar surface-toolbar sticky top-0 z-10 grid grid-cols-2 gap-4 px-4 py-2 xl:grid-cols-3">
-                <div className='hidden min-w-0 text-nowrap truncate text-[12px] font-medium text-[#8e8e96] xl:block'>{file?.name || 'PDF 文件预览'}</div>
-                <div className="flex items-center justify-center gap-3">
-
+            <div className="pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-4 rounded-full border border-[var(--line-2)] bg-white/85 px-4 py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-white/95">
+                <div className="flex items-center gap-2">
                     <button
                         onClick={prevPage}
                         disabled={currentPage <= 1}
-                        className="btn-icon size-8 cursor-pointer"
+                        className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]"
                     >
-                        <ChevronLeft size={20} strokeWidth={1} />
+                        <ChevronLeft size={18} strokeWidth={1.5} />
                     </button>
-                    <div className="flex items-center gap-1">
-
+                    <div className="flex items-center gap-1.5">
                         <input
                             type="number"
                             min={1}
@@ -331,32 +324,31 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
                                     e.currentTarget.blur();
                                 }
                             }}
-                            className="h-7 w-12 rounded-full border border-[rgba(0,0,0,0.08)] bg-white/80 text-center text-[12px] font-medium shadow-inner"
+                            className="h-7 w-12 rounded-md border border-[var(--line-2)] bg-white text-center text-[13px] font-medium shadow-sm focus:border-[var(--a)] focus:outline-none focus:ring-1 focus:ring-[var(--a-glow)]"
                         />
-                        <span className="text-sm text-[#8e8e96]">/</span>
-                        <span className="text-sm text-[#8e8e96]">{numPages || '?'}</span>
+                        <span className="text-[13px] text-[var(--t-3)]">/ {numPages || '?'}</span>
                     </div>
-
                     <button
                         onClick={nextPage}
                         disabled={currentPage >= numPages}
-                        className="btn-icon size-8 cursor-pointer"
+                        className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]"
                     >
-                        <ChevronRight size={20} strokeWidth={1} />
+                        <ChevronRight size={18} strokeWidth={1.5} />
                     </button>
-
                 </div>
 
-                <div className="flex items-center justify-end gap-3">
-                    <button onClick={zoomOut} className="btn-icon size-8 cursor-pointer">
-                        <ZoomOut size={20} strokeWidth={1} />
+                <div className="h-5 w-[1px] bg-[var(--line-2)]"></div>
+
+                <div className="flex items-center gap-2">
+                    <button onClick={zoomOut} className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]">
+                        <ZoomOut size={16} strokeWidth={1.5} />
                     </button>
-                    <span className="w-10 text-center text-sm tabular-nums text-[#8e8e96]">{Math.round(scale * 100)}%</span>
-                    <button onClick={zoomIn} className="btn-icon size-8 cursor-pointer">
-                        <ZoomIn size={20} strokeWidth={1} />
+                    <span className="w-12 text-center text-[13px] tabular-nums text-[var(--t-2)]">{Math.round(scale * 100)}%</span>
+                    <button onClick={zoomIn} className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]">
+                        <ZoomIn size={16} strokeWidth={1.5} />
                     </button>
-                    <button onClick={resetZoom} className="btn-icon size-8 cursor-pointer">
-                        <RotateCcw size={18} strokeWidth={1} />
+                    <button onClick={resetZoom} className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]">
+                        <RotateCcw size={16} strokeWidth={1.5} />
                     </button>
                 </div>
             </div>

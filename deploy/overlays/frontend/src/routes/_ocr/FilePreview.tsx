@@ -222,11 +222,11 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 	}
 
 	const imageToolbar = isImageFile ? (
-		<div className='pointer-events-auto absolute right-4 top-4 z-20 flex items-center gap-1 rounded-full border border-[rgba(38,35,29,0.10)] bg-white/85 px-1 py-1 shadow-sm backdrop-blur-xl'>
+		<div className='pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-[var(--line-2)] bg-white/85 px-4 py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-white/95'>
 			<Button
 				variant='ghost'
 				size='icon-sm'
-				className='btn-icon size-8'
+				className='btn-icon size-8 text-[#6F685D] hover:text-[#1D1D1F]'
 				aria-label='缩小'
 				disabled={imageZoom <= IMAGE_ZOOM_MIN + 1e-6}
 				onClick={() =>
@@ -236,13 +236,13 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 				}>
 				<Minus className='size-4' />
 			</Button>
-			<span className='min-w-[3.25rem] text-center text-[11px] tabular-nums text-[#6F685D]'>
+			<span className='w-12 text-center text-[13px] tabular-nums text-[var(--t-2)]'>
 				{Math.round(imageZoom * 100)}%
 			</span>
 			<Button
 				variant='ghost'
 				size='icon-sm'
-				className='btn-icon size-8'
+				className='btn-icon size-8 text-[#6F685D] hover:text-[#1D1D1F]'
 				aria-label='放大'
 				disabled={imageZoom >= IMAGE_ZOOM_MAX - 1e-6}
 				onClick={() =>
@@ -252,11 +252,11 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 				}>
 				<Plus className='size-4' />
 			</Button>
-			<span className='mx-1 h-4 w-px bg-[rgba(38,35,29,0.10)]' aria-hidden='true' />
+			<span className='mx-1 h-5 w-px bg-[var(--line-2)]' aria-hidden='true' />
 			<Button
 				variant='ghost'
 				size='icon-sm'
-				className='btn-icon size-8'
+				className='btn-icon size-8 text-[#6F685D] hover:text-[#1D1D1F]'
 				aria-label='适应窗口'
 				onClick={() => {
 					setImageZoom(1)
@@ -267,7 +267,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 			<Button
 				variant='ghost'
 				size='icon-sm'
-				className='btn-icon size-8'
+				className='btn-icon size-8 text-[#6F685D] hover:text-[#1D1D1F]'
 				aria-label='旋转 90°'
 				onClick={() => setImageRotation(r => (r + 90) % 360)}>
 				<RotateCw className='size-4' />

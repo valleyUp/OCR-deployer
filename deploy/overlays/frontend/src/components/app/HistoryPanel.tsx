@@ -258,7 +258,7 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 			</div>
 
 			{/* Job list */}
-			<div className='queue sb-accent scrollbar-thin flex-1 overflow-auto px-3 pb-4'>
+			<div className='queue flex-1 px-3 pb-4 overflow-y-auto sb-accent'>
 				{filteredRecords.length === 0 ? (
 					<div className='flex min-h-[8rem] flex-col items-center justify-center rounded-xl border border-dashed border-[rgba(38,35,29,0.10)] bg-[rgba(255,255,255,0.4)] px-4 py-8 text-center'>
 						<span className='mb-2 flex size-10 items-center justify-center rounded-xl bg-[rgba(38,35,29,0.04)] text-[#9A9286]'>

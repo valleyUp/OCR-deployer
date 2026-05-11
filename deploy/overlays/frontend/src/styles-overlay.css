@@ -1108,11 +1108,9 @@ svg {
    ============================================ */
 
 .queue {
-  display: grid;
-  gap: 8px;
-  max-height: 246px;
-  overflow: auto;
-  padding-right: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .scroll-row {
@@ -1550,10 +1548,16 @@ svg {
 }
 
 .tab-panel {
-  display: none;
+  opacity: 0;
+  position: absolute;
+  pointer-events: none;
+  transition: opacity var(--dt-2) var(--expo-out);
 }
 
 .tab-panel.active {
+  opacity: 1;
+  position: relative;
+  pointer-events: auto;
   display: grid;
   gap: 12px;
 }

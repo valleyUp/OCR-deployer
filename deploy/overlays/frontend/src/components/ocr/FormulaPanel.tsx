@@ -12,9 +12,7 @@ import {
 	ChevronDown,
 	FileArchive,
 	Loader2,
-	Search,
 	Sigma,
-	X,
 	Copy
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -32,6 +30,7 @@ import { toast } from 'sonner'
 interface FormulaPanelProps {
 	formulas: FormulaItem[]
 	taskId?: string | number
+	searchQuery?: string
 }
 
 type CopyFormat = 'latex' | 'mathml' | 'unicodemath'
@@ -204,7 +203,7 @@ function ExportMenu({ taskId, disabled }: ExportMenuProps) {
 	)
 }
 
-export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
+export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPanelProps) {
 	const blocks = useOcrStore(s => s.blocks)
 	const setHoveredBlockId = useOcrStore(s => s.setHoveredBlockId)
 	const setClickedBlockId = useOcrStore(s => s.setClickedBlockId)
@@ -213,21 +212,20 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 	const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 	const [copyBusy, setCopyBusy] = useState<string | null>(null)
 	const [copiedKey, setCopiedKey] = useState<string | null>(null)
-	const [query, setQuery] = useState('')
 	const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
 	const keyFor = (formula: FormulaItem, index: number) =>
 		formula.formula_id || `${formula.page_index}-${index}`
 
 	const filtered = useMemo(() => {
-		const trimmed = query.trim().toLowerCase()
+		const trimmed = searchQuery.trim().toLowerCase()
 		if (!trimmed) return formulas
 		return formulas.filter(f => {
 			const latex = (f.latex || '').toLowerCase()
 			const id = (f.formula_id || '').toLowerCase()
 			return latex.includes(trimmed) || id.includes(trimmed)
 		})
-	}, [query, formulas])
+	}, [searchQuery, formulas])
 
 	const scrollSelectedIntoView = (key: string | null) => {
 		if (!key) return
@@ -390,31 +388,12 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 					</div>
 					<ExportMenu taskId={taskId} />
 				</div>
-				<div className='relative'>
-					<Search className='pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#8e8e96]' />
-					<input
-						type='text'
-						value={query}
-						placeholder='搜索 LaTeX 或 ID'
-						onChange={event => setQuery(event.target.value)}
-						className='h-9 w-full rounded-full border border-[rgba(0,0,0,0.08)] bg-white/80 pl-9 pr-8 text-[12px] text-[#0d0d12] shadow-inner outline-none transition-colors duration-150 placeholder:text-[#8e8e96] focus-visible:border-blue-400'
-					/>
-					{query && (
-						<button
-							type='button'
-							aria-label='清空搜索'
-							onClick={() => setQuery('')}
-							className='absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-[#8e8e96] hover:bg-[rgba(0,0,0,0.04)] hover:text-[#0d0d12]'>
-							<X className='size-3' />
-						</button>
-					)}
-				</div>
 			</div>
 
-			<div className='scrollbar-thin flex-1 overflow-auto'>
+			<div className='flex-1'>
 				{filtered.length === 0 ? (
 					<div className='flex h-full items-center justify-center px-6 text-center text-sm text-[#8e8e96]'>
-						<p>没有匹配 "{query}" 的公式</p>
+						<p>No results for "{searchQuery}"</p>
 					</div>
 				) : (
 					<div className='space-y-3 p-4'>
@@ -494,6 +473,25 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 													<><Copy className='mr-1 size-3' /> MathML</>
 												)}
 											</Button>
+												<Button
+													variant='ghost'
+													size='sm'
+													disabled={copyBusy === `${formula.formula_id || ''}|unicodemath`}
+													title='Copy UnicodeMath (U)'
+													aria-label='Copy UnicodeMath'
+													onClick={event => {
+														event.stopPropagation()
+														void copyFormula(formula, 'unicodemath')
+													}}
+													className='h-7 rounded-md px-2 text-[11px] font-medium text-[#8e8e96] hover:bg-black/5 hover:text-[#0d0d12] transition-colors'>
+													{copiedKey === `${formula.formula_id || ''}|unicodemath` ? (
+														<><Check className='mr-1 size-3 text-emerald-600' /> UMath</>
+													) : copyBusy === `${formula.formula_id || ''}|unicodemath` ? (
+														<Loader2 className='size-3 animate-spin' />
+													) : (
+														<><Copy className='mr-1 size-3' /> UMath</>
+													)}
+												</Button>
 										</div>
 									</div>
 									<FormulaPreview latex={formula.latex} />

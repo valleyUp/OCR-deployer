@@ -6,9 +6,11 @@ import {
 	DownloadIcon,
 	FileTextIcon,
 	Layers,
+	Search,
 	Sigma,
 	Timer,
-	Workflow
+	Workflow,
+	X
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -54,6 +56,7 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 	const setBlocks = useOcrStore(s => s.setBlocks)
 
 	const [activeTab, setActiveTab] = useState<ResultTab>('markdown')
+	const [searchQuery, setSearchQuery] = useState('')
 	const autoSwitchedRef = useRef(false)
 	const autoSwitchTaskRef = useRef<string | number | null>(null)
 
@@ -284,7 +287,12 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 			</div>
 
 			{/* Meta badges */}
-			{metaBadges.length > 0 && (
+			<div className="px-4 py-2.5 border-b border-[var(--line-1)] flex items-center gap-2 flex-shrink-0 bg-white/60">\
+              <Search className="size-3.5 text-[var(--t-3)] shrink-0" />\
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search across results..." className="flex-1 bg-transparent text-[12px] text-[var(--t-1)] outline-none placeholder:text-[var(--t-3)]" />\
+              {searchQuery && (<button onClick={() => setSearchQuery("")} className="shrink-0 text-[var(--t-3)] hover:text-[var(--t-1)]"><X className="size-3.5" /></button>)}\
+            </div>\
+            {metaBadges.length > 0 && (
 				<div className='flex flex-wrap items-center gap-1.5 border-b border-[rgba(38,35,29,0.06)] bg-[rgba(255,255,255,0.6)] px-4 py-2'>
 					{metaBadges.map(item => {
 						const Icon = item.icon
@@ -359,7 +367,7 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 				{/* JSON panel */}
 				<section className={cn('tab-panel', activeTab === 'json' && 'active')}>
 					{response && status === 'completed' ? (
-						<div className='card json-card overflow-auto'>
+						<div className="card json-card">
 							<JsonPreview json={response} />
 						</div>
 					) : status === 'pending' || status === 'processing' ? (

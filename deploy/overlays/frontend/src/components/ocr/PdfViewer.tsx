@@ -8,8 +8,10 @@ import { usePdfZoom } from '@/hooks/usePdfZoom';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 // import 'react-pdf/dist/Page/TextLayer.css';
 
-const PDFJS_STATIC_BASE = '/pdfjs';
-pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS_STATIC_BASE}/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+).toString();
 
 
 
@@ -359,7 +361,7 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
             </div>
 
             {/* 滚动容器 - 虚拟渲染 */}
-            <div ref={scrollContainerRef} className="scrollbar-thin pdf-scroll-container relative flex-1 overflow-auto bg-[#F9F9F7] p-6">
+            <div ref={scrollContainerRef} className="scrollbar-thin pdf-scroll-container relative flex-1 overflow-auto bg-[#F9F9F7]">
                 <Document
                     file={file}
                     options={documentOptions}

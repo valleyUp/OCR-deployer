@@ -233,14 +233,14 @@ svg {
 }
 
 /* Backwards-compat thin scrollbar */
-.scrollbar-thin::-webkit-scrollbar { width: 5px; }
-.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: var(--bg-5);
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: var(--line-4);
+  background: rgba(0, 0, 0, 0.22);
 }
 
 
@@ -1527,7 +1527,7 @@ svg {
   transform: translateX(100%);
 }
 
-.tab-list[data-active="formula"] .result-thumb {
+.tab-list[data-active="formulas"] .result-thumb {
   transform: translateX(200%);
 }
 

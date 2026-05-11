@@ -364,15 +364,7 @@ export function FileUpload({
 	return (
 		<div className='flex shrink-0 flex-col'>
 			<div className='flex flex-col gap-4 p-5'>
-				{/* Heading */}
-				<div>
-					<h2 className='font-[family-name:var(--f-display)] text-[20px] font-semibold tracking-tight text-[#26231D]'>
-						新建任务
-					</h2>
-					<p className='mt-0.5 text-[12px] text-[#9A9286]'>
-						拖拽文件、点击或粘贴
-					</p>
-				</div>
+
 
 				{/* Mode Switch — Scheme B card + sliding thumb */}
 				<div className='card mode-card'>
@@ -407,13 +399,11 @@ export function FileUpload({
 						<div className='upload-icon'>
 							<UploadCloud className='size-6' />
 						</div>
-						<p className='upload-title'>
-							{isDragging ? '松手上传' : 'Drop / Paste'}
+						<p className='upload-title' style={{ fontSize: '18px' }}>
+							{isDragging ? '松手上传' : '新建任务'}
 						</p>
 						<p className='upload-copy'>
-							{processingMode === 'formula'
-								? '公式任务会过滤 equation 之外的版面块，并默认打开公式结果。'
-								: '文档任务保留标题、正文、表格与公式，并默认打开 Markdown 结果。'}
+							点击上传或拖拽文件到此处，也可以在任意位置 <kbd className='font-mono rounded border bg-[rgba(0,0,0,0.04)] px-1 text-[10px]'>Ctrl+V</kbd> 粘贴
 						</p>
 						<div className='chips'>
 							<span className='mono-chip'>PNG</span>

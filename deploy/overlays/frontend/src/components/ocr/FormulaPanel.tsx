@@ -496,64 +496,47 @@ export function FormulaPanel({ formulas, taskId }: FormulaPanelProps) {
 											</span>
 										</div>
 										<div className='flex flex-wrap items-center gap-1'>
-											{(Object.keys(COPY_LABELS) as CopyFormat[]).map(format => {
-												const busyKey = `${formula.formula_id || ''}|${format}`
-												const isBusy = copyBusy === busyKey
-												const justCopied = copiedKey === busyKey
-												return (
-													<Button
-														key={format}
-														variant={justCopied ? 'default' : 'secondary'}
-														size='sm'
-														disabled={isBusy}
-														title={`快捷键 ${COPY_SHORTCUT[format]}`}
-														aria-label={`复制 ${COPY_LABELS[format]}`}
-														onClick={event => {
-															event.stopPropagation()
-															void copyFormula(formula, format)
-														}}
-														className='h-7 gap-1 rounded-full px-2.5 text-[11.5px]'>
-														{justCopied ? (
-															<Check className='size-3.5' />
-														) : isBusy ? (
-															<Loader2 className='size-3.5 animate-spin' />
-														) : null}
-														{COPY_LABELS[format]}
-													</Button>
-												)
-											})}
+											<Button
+												variant='ghost'
+												size='sm'
+												disabled={copyBusy === `${formula.formula_id || ''}|latex`}
+												title='复制 LaTeX'
+												aria-label='复制 LaTeX'
+												onClick={event => {
+													event.stopPropagation()
+													void copyFormula(formula, 'latex')
+												}}
+												className='h-7 rounded-md px-2 text-[11px] font-medium text-[#8e8e96] hover:bg-black/5 hover:text-[#0d0d12] transition-colors'>
+												{copiedKey === `${formula.formula_id || ''}|latex` ? (
+													<><Check className='mr-1 size-3 text-emerald-600' /> 已复制</>
+												) : copyBusy === `${formula.formula_id || ''}|latex` ? (
+													<Loader2 className='size-3 animate-spin' />
+												) : (
+													<><Copy className='mr-1 size-3' /> LaTeX</>
+												)}
+											</Button>
+											<Button
+												variant='ghost'
+												size='sm'
+												disabled={copyBusy === `${formula.formula_id || ''}|mathml`}
+												title='复制 MathML'
+												aria-label='复制 MathML'
+												onClick={event => {
+													event.stopPropagation()
+													void copyFormula(formula, 'mathml')
+												}}
+												className='h-7 rounded-md px-2 text-[11px] font-medium text-[#8e8e96] hover:bg-black/5 hover:text-[#0d0d12] transition-colors'>
+												{copiedKey === `${formula.formula_id || ''}|mathml` ? (
+													<><Check className='mr-1 size-3 text-emerald-600' /> 已复制</>
+												) : copyBusy === `${formula.formula_id || ''}|mathml` ? (
+													<Loader2 className='size-3 animate-spin' />
+												) : (
+													<><Copy className='mr-1 size-3' /> MathML</>
+												)}
+											</Button>
 										</div>
 									</div>
 									<FormulaPreview latex={formula.latex} />
-									<div className='mt-3 flex flex-wrap items-center justify-end gap-1.5'>
-										{DOWNLOAD_FORMATS.map(item => {
-											const busyKey = `${formula.formula_id || `${formula.page_index}-${formula.block_id ?? 'formula'}`}|${item.format}`
-											const isBusy = downloadBusy === busyKey
-											const justDownloaded = downloadedKey === busyKey
-											return (
-												<Button
-													key={item.format}
-													variant='outline'
-													size='sm'
-													disabled={isBusy}
-													aria-label={`下载 ${item.label}`}
-													onClick={event => {
-														event.stopPropagation()
-														void downloadFormula(formula, item.format)
-													}}
-													className='h-7 gap-1 rounded-full border-[rgba(0,0,0,0.08)] bg-white/80 px-2.5 text-[11px] font-semibold text-[#54545c] shadow-sm hover:bg-white'>
-													{justDownloaded ? (
-														<Check className='size-3.5 text-emerald-600' />
-													) : isBusy ? (
-														<Loader2 className='size-3.5 animate-spin' />
-													) : (
-														<Download className='size-3.5' />
-													)}
-													{item.label}
-												</Button>
-											)
-										})}
-									</div>
 								</div>
 							)
 						})}

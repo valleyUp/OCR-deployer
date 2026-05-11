@@ -6,7 +6,9 @@ import {
 	History,
 	Loader2,
 	Sigma,
-	Trash2
+	Trash2,
+	Search,
+	X
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,7 +21,7 @@ import {
 	DialogTitle
 } from '@/components/ui/dialog'
 import { cn } from '@/libs/utils'
-import { formatDuration, formatRelativeTime } from '@/libs/format'
+import { formatDuration, formatRelativeTime, formatFileSize } from '@/libs/format'
 import { useHistoryStore } from '@/store/useHistoryStore'
 import type { HistoryRecord } from '@/libs/historyDb'
 import { toast } from 'sonner'
@@ -129,7 +131,7 @@ function HistoryItem({
 			<span className='job-main'>
 				<span className='job-name'>{record.fileName}</span>
 				<span className='job-meta'>
-					{MODE_LABEL[record.processingMode]} ·{' '}
+					{MODE_LABEL[record.processingMode]} · {formatFileSize(record.fileSize)} ·{' '}
 					{record.status === 'completed'
 						? formatDuration(record.executionTime)
 						: record.status === 'pending' || record.status === 'processing'
@@ -192,6 +194,7 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 	const loadResult = useHistoryStore(s => s.loadResult)
 
 	const [confirmClear, setConfirmClear] = useState(false)
+	const [query, setQuery] = useState('')
 
 	useEffect(() => {
 		void hydrate()
@@ -201,6 +204,12 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 		() => records.find(r => r.localId === currentLocalId) ?? null,
 		[records, currentLocalId]
 	)
+
+	const filteredRecords = useMemo(() => {
+		if (!query) return records
+		const lower = query.toLowerCase()
+		return records.filter(r => r.fileName.toLowerCase().includes(lower))
+	}, [records, query])
 
 	const handleSelect = async (record: HistoryRecord) => {
 		if (record.status !== 'completed' && !record.resultStripped) return
@@ -216,14 +225,42 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 
 	return (
 		<div className='flex min-h-0 flex-1 flex-col'>
-			{/* Heading */}
-			<div style={{ padding: '6px 12px 6px' }}>
-				<p className='section-title'>recent jobs</p>
+			<div className='flex flex-col gap-2 px-4 py-2 border-t border-[rgba(0,0,0,0.06)] bg-white/50'>
+				<div className='flex items-center justify-between'>
+					<p className='section-title m-0'>recent jobs</p>
+					{records.length > 0 && (
+						<button
+							aria-label='清空历史'
+							className='btn-icon size-6 text-[#9A9286] hover:text-[#B91C1C] rounded-md'
+							onClick={() => setConfirmClear(true)}>
+							<Trash2 className='size-3.5' />
+						</button>
+					)}
+				</div>
+				<div className='relative'>
+					<Search className='pointer-events-none absolute left-2.5 top-1/2 size-3 -translate-y-1/2 text-[#8e8e96]' />
+					<input
+						type='text'
+						value={query}
+						placeholder='搜索任务记录'
+						onChange={event => setQuery(event.target.value)}
+						className='h-7 w-full rounded-md border border-[rgba(0,0,0,0.08)] bg-white/80 pl-7 pr-6 text-[11px] text-[#0d0d12] shadow-inner outline-none transition-colors duration-150 placeholder:text-[#8e8e96] focus-visible:border-blue-400'
+					/>
+					{query && (
+						<button
+							type='button'
+							aria-label='清空搜索'
+							onClick={() => setQuery('')}
+							className='absolute right-1.5 top-1/2 flex size-4 -translate-y-1/2 items-center justify-center rounded-full text-[#8e8e96] hover:bg-[rgba(0,0,0,0.04)] hover:text-[#0d0d12]'>
+							<X className='size-2.5' />
+						</button>
+					)}
+				</div>
 			</div>
 
 			{/* Job list */}
-			<div className='queue sb-accent flex-1 overflow-auto px-3 pb-4'>
-				{records.length === 0 ? (
+			<div className='queue sb-accent scrollbar-thin flex-1 overflow-auto px-3 pb-4'>
+				{filteredRecords.length === 0 ? (
 					<div className='flex min-h-[8rem] flex-col items-center justify-center rounded-xl border border-dashed border-[rgba(38,35,29,0.10)] bg-[rgba(255,255,255,0.4)] px-4 py-8 text-center'>
 						<span className='mb-2 flex size-10 items-center justify-center rounded-xl bg-[rgba(38,35,29,0.04)] text-[#9A9286]'>
 							<History className='size-5' />
@@ -231,27 +268,8 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 						<p className='text-[12px] font-medium text-[#6F685D]'>暂无记录</p>
 					</div>
 				) : (
-					<>
-						<div className='flex items-center justify-between px-1 py-2'>
-							<div className='flex items-center gap-1.5 text-[12px] font-semibold text-[#26231D]'>
-								<History className='size-3.5 text-[#9A9286]' />
-								历史记录
-								<Badge
-									variant='outline'
-									className='pill h-4 px-1.5 text-[10px] font-medium text-[#9A9286]'>
-									{records.length}
-								</Badge>
-							</div>
-							{records.length > 0 && (
-								<button
-									aria-label='清空历史'
-									className='btn-icon size-7 text-[#9A9286] hover:text-[#B91C1C] rounded-lg'
-									onClick={() => setConfirmClear(true)}>
-									<Trash2 className='size-3.5' />
-								</button>
-							)}
-						</div>
-						{records.map((record, index) => (
+					<div className='mt-2 space-y-1.5'>
+						{filteredRecords.map((record, index) => (
 							<HistoryItem
 								key={record.localId}
 								record={record}
@@ -261,7 +279,7 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
 								onDelete={() => void remove(record.localId)}
 							/>
 						))}
-					</>
+					</div>
 				)}
 			</div>
 

@@ -315,7 +315,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 						<div className='flex shrink-0 items-center gap-2'>
 							<span className='status-pill status-info'>
 								<LocateFixed className='size-3' />
-								{activeBlock?.layoutType || '预览'}
+								{activeBlock?.layoutType || 'preview'}
 							</span>
 							<span
 								className={cn(
@@ -327,18 +327,18 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 											: 'status-info'
 								)}>
 								{result?.status === 'completed'
-									? '已完成'
-									: result?.status === 'failed'
-										? '识别失败'
-										: result?.status === 'processing'
-											? '识别中'
-											: '待识别'}
+									? 'done'
+										: result?.status === 'failed'
+											? 'failed'
+											: result?.status === 'processing'
+												? 'processing'
+												: 'idle'}
 							</span>
 						</div>
 					</div>
 
 					{/* Preview content */}
-					<div className='relative flex min-h-0 flex-col overflow-hidden' ref={viewerRef}>
+						<div className='relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--line-2)] bg-white' ref={viewerRef}>
 						{imageToolbar}
 						{isPdfFile ? (
 							<PdfViewer

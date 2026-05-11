@@ -219,22 +219,40 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 				].filter((item): item is { key: string; icon: any; label: string } => Boolean(item))
 			: []
 
-	return (
-		<div className='flex h-full flex-col'>
+		if (!status) {
+			return (
+				<div className='flex h-full flex-col'>
+					<div className='panel-empty'>
+						<div>
+							<div className='mx-auto mb-4 flex size-14 items-center justify-center rounded-xl bg-[var(--bg-3)] text-[var(--t-3)]'>
+								<FileTextIcon className='size-7' />
+							</div>
+							<p className='font-medium text-[var(--t-2)]'>No result yet</p>
+							<p className='mt-1 text-xs'>Upload a file to see recognition output</p>
+						</div>
+					</div>
+				</div>
+			)
+		}
+
+		return (
+			<div className='flex h-full flex-col'>
 			{/* Header */}
 			<header className='result-head'>
 				<div className='result-title'>
-					<h1>Recognition Result</h1>
+					<h1>Result</h1>
 					<p>
 						{processingMode === 'formula'
 							? 'equation blocks only · formula tab active'
 							: 'full layout · markdown tab active'}
 					</p>
 				</div>
-				<button className='btn-outline' onClick={handleDownload}>
-					<DownloadIcon className='size-4' />
-					Export ZIP
-				</button>
+				{status === 'completed' && (
+						<button className='btn-outline' onClick={handleDownload}>
+							<DownloadIcon className='size-4' />
+							Export
+						</button>
+					)}
 			</header>
 
 			{/* Tab switcher — sliding pill */}

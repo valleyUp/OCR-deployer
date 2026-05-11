@@ -54,6 +54,7 @@ FORMULA_FORMATS = {
     "tex",
     "mathml",
     "mml",
+    "svg",
     "png",
     "unicodemath",
     "unicode",
@@ -77,6 +78,31 @@ class FormulaRenderError(ValueError):
     """Raised when a formula cannot be rendered."""
 
 
+BLOCKED_TEX_COMMAND_PATTERN = re.compile(
+    r"\\(?:"
+    r"documentclass|usepackage|input|include|includeonly|openin|openout|"
+    r"read|write|write18|directlua|catcode|special|shipout"
+    r")\b"
+)
+DISPLAY_ENV_PATTERN = re.compile(
+    r"^\s*\\begin\{"
+    r"(?:align|align\*|alignat|alignat\*|equation|equation\*|gather|gather\*|"
+    r"multline|multline\*|flalign|flalign\*)"
+    r"\}"
+)
+TEXLIVE_PACKAGES = [
+    "amsmath",
+    "amssymb",
+    "mathtools",
+    "bm",
+    "cancel",
+    "braket",
+    "physics",
+    "mhchem",
+    "siunitx",
+]
+
+
 def normalize_formula_format(value: str) -> str:
     fmt = value.strip().lower()
     if fmt == "tex":
@@ -85,7 +111,7 @@ def normalize_formula_format(value: str) -> str:
         return "mathml"
     if fmt in {"um", "unicode", "unicodemath"}:
         return "unicodemath"
-    if fmt not in {"latex", "mathml", "png", "unicodemath"}:
+    if fmt not in {"latex", "mathml", "svg", "png", "unicodemath"}:
         raise ValueError(f"Unsupported formula format: {value}")
     return fmt
 
@@ -147,6 +173,18 @@ def validate_latex_source(latex: str) -> None:
                 raise FormulaRenderError("Invalid LaTeX: unbalanced braces")
     if depth != 0:
         raise FormulaRenderError("Invalid LaTeX: unbalanced braces")
+
+
+def validate_texlive_source(latex: str) -> None:
+    match = BLOCKED_TEX_COMMAND_PATTERN.search(latex)
+    if match:
+        raise FormulaRenderError(f"Unsupported LaTeX command: {match.group(0)}")
+
+
+def wrap_texlive_formula(latex: str) -> str:
+    if DISPLAY_ENV_PATTERN.match(latex):
+        return latex
+    return "\\[\n" + latex + "\n\\]"
 
 
 def extract_latex_candidates(content: Any) -> List[str]:
@@ -377,6 +415,78 @@ def render_mathjax_markup(latex: str, format: str) -> str:
     return output
 
 
+def render_texlive_svg(latex: str) -> str:
+    latex_bin = shutil.which("latex")
+    dvisvgm_bin = shutil.which("dvisvgm")
+    if not latex_bin or not dvisvgm_bin:
+        raise FormulaRenderError("TeX Live renderer is not installed")
+
+    validate_texlive_source(latex)
+    package_lines = "\n".join(f"\\usepackage{{{package}}}" for package in TEXLIVE_PACKAGES)
+    document = f"""\\documentclass[preview,border=2pt]{{standalone}}
+\\usepackage[utf8]{{inputenc}}
+\\usepackage[T1]{{fontenc}}
+{package_lines}
+\\begin{{document}}
+{wrap_texlive_formula(latex)}
+\\end{{document}}
+"""
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        tex_path = tmp_path / "formula.tex"
+        dvi_path = tmp_path / "formula.dvi"
+        svg_path = tmp_path / "formula.svg"
+        tex_path.write_text(document, encoding="utf-8")
+
+        try:
+            subprocess.run(
+                [
+                    latex_bin,
+                    "-interaction=nonstopmode",
+                    "-halt-on-error",
+                    "-no-shell-escape",
+                    tex_path.name,
+                ],
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+                timeout=_render_timeout(),
+                check=True,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            detail = getattr(exc, "stderr", "") or getattr(exc, "stdout", "") or str(exc)
+            raise FormulaRenderError(f"LaTeX render failed: {detail}") from exc
+
+        if not dvi_path.exists():
+            raise FormulaRenderError("LaTeX renderer did not produce DVI output")
+
+        try:
+            subprocess.run(
+                [
+                    dvisvgm_bin,
+                    "--no-fonts",
+                    "--exact",
+                    "--bbox=min",
+                    "-o",
+                    svg_path.name,
+                    dvi_path.name,
+                ],
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+                timeout=_render_timeout(),
+                check=True,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            detail = getattr(exc, "stderr", "") or getattr(exc, "stdout", "") or str(exc)
+            raise FormulaRenderError(f"DVI to SVG conversion failed: {detail}") from exc
+
+        if not svg_path.exists():
+            raise FormulaRenderError("dvisvgm did not produce SVG output")
+        return extract_svg_markup(svg_path.read_text(encoding="utf-8"))
+
+
 def fallback_mathml(latex: str) -> str:
     escaped = html.escape(latex)
     return f'<math xmlns="http://www.w3.org/1998/Math/MathML"><mtext>{escaped}</mtext></math>'
@@ -513,11 +623,11 @@ def render_formula_bytes(latex: str, format: str) -> tuple[bytes, str, str]:
             unicode_math = fallback_unicodemath(normalized_latex)
         return unicode_math.encode("utf-8"), "text/plain; charset=utf-8", "txt"
 
-    try:
-        svg_markup = render_mathjax_markup(normalized_latex, "svg")
-        png = svg_to_png(svg_markup)
-    except FormulaRenderError:
-        png = fallback_png(normalized_latex)
+    svg_markup = render_texlive_svg(normalized_latex)
+    if fmt == "svg":
+        return svg_markup.encode("utf-8"), "image/svg+xml; charset=utf-8", "svg"
+
+    png = svg_to_png(svg_markup)
     return png, "image/png", "png"
 
 

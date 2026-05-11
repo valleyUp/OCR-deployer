@@ -12,13 +12,13 @@ router = APIRouter(prefix="/formulas", tags=["formulas"])
 
 class FormulaRenderRequest(BaseModel):
     latex: str = Field(..., min_length=1, description="LaTeX source")
-    format: str = Field("latex", description="latex, mathml, or png")
+    format: str = Field("latex", description="latex, mathml, svg, png, or unicodemath")
 
 
 @router.post("/render")
 async def render_formula(payload: FormulaRenderRequest):
     """
-    Render a single formula to LaTeX, MathML, or PNG.
+    Render a single formula to LaTeX, MathML, SVG, PNG, or UnicodeMath.
     """
     try:
         content, media_type, extension = render_formula_bytes(

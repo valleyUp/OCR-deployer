@@ -1,5 +1,6 @@
 import io
 import json
+import shutil
 import zipfile
 
 from app.services.formula_service import (
@@ -10,6 +11,7 @@ from app.services.formula_service import (
     parse_formula_formats,
     render_formula_bytes,
     should_keep_formula_mode_block,
+    validate_texlive_source,
 )
 import pytest
 
@@ -78,10 +80,11 @@ def test_formula_mode_unlabeled_fallback_rejects_inline_math():
 
 def test_render_and_zip_exports_are_format_stable():
     assert normalize_latex(r"\[ a + b \]") == "a + b"
-    assert parse_formula_formats("tex,mml,um,png") == [
+    assert parse_formula_formats("tex,mml,um,svg,png") == [
         "latex",
         "mathml",
         "unicodemath",
+        "svg",
         "png",
     ]
 
@@ -135,6 +138,36 @@ def test_unicodemath_falls_back_when_renderer_is_missing(monkeypatch):
 def test_parse_formula_formats_accepts_unicodemath_aliases():
     assert parse_formula_formats("unicode") == ["unicodemath"]
     assert parse_formula_formats(["UM", "UnicodeMath"]) == ["unicodemath"]
+
+
+def test_texlive_source_rejects_unsafe_commands():
+    for latex in [
+        r"\input{/etc/passwd}",
+        r"\usepackage{shellesc}",
+        r"\write18{touch /tmp/x}",
+        r"\directlua{os.execute('id')}",
+    ]:
+        with pytest.raises(FormulaRenderError):
+            validate_texlive_source(latex)
+
+
+def test_svg_render_reports_missing_texlive(monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda _command: None)
+
+    with pytest.raises(FormulaRenderError, match="TeX Live renderer is not installed"):
+        render_formula_bytes("a+b", "svg")
+
+
+@pytest.mark.skipif(
+    not shutil.which("latex") or not shutil.which("dvisvgm"),
+    reason="TeX Live renderer is not installed",
+)
+def test_svg_render_uses_texlive_when_available():
+    content, media_type, extension = render_formula_bytes(r"\frac{a}{b}", "svg")
+
+    assert extension == "svg"
+    assert media_type.startswith("image/svg+xml")
+    assert b"<svg" in content
 
 
 def test_rejects_obviously_invalid_latex():

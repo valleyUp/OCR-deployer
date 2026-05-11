@@ -234,6 +234,7 @@ GET  /api/v1/tasks/{task_id}/formulas/export?formats=latex,mathml,unicodemath,pn
 - `latex` / `tex`
 - `mathml` / `mml`
 - `unicodemath` / `unicode` / `um`
+- `svg`
 - `png`
 
 批量导出返回 zip，包含每个公式的目标格式文件和 `manifest.json`。单个坏公式不会导致整个 zip 失败，会写入对应的 `*.error.txt` 并在
@@ -245,7 +246,7 @@ GET  /api/v1/tasks/{task_id}/formulas/export?formats=latex,mathml,unicodemath,pn
 
 - PDF.js worker、cmaps、standard fonts 在 frontend 镜像构建阶段复制到 `public/pdfjs`，运行期由 nginx 的 `/pdfjs/` 本地路径提供。
 - WebUI 的 API 请求走同源 `/api/`，由 nginx 代理到 `backend:8000`。
-- 公式渲染在 backend 容器内完成，`mathjax-full@3.2.2` 固定在 `deploy/overlays/backend/formula-renderer/package-lock.json`，PNG 通过本地 `rsvg-convert` 栅格化。
+- 公式渲染在 backend 容器内完成：MathML/UnicodeMath 使用固定在 `deploy/overlays/backend/formula-renderer/package-lock.json` 的 `mathjax-full@3.2.2`，SVG/PNG 使用容器内精选 TeX Live 数学包渲染。
 
 构建期仍需要可访问的 apt、PyPI、npm、镜像仓库或内部镜像源。相关入口：
 

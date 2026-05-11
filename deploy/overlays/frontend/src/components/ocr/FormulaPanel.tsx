@@ -1,9 +1,7 @@
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, FileArchive, Loader2, Sigma } from 'lucide-react'
 import { cn } from '@/libs/utils'
-import { exportTaskFormulas, renderFormulaText, type FormulaItem } from '@/libs/api'
+import { exportTaskFormulas, renderFormula, renderFormulaText, type FormulaItem } from '@/libs/api'
 import { type Block, useOcrStore } from '@/store/useOcrStore'
 import { useLinkState, useLinkStore } from '@/hooks/useLinkState'
 import { toast } from 'sonner'
@@ -11,12 +9,55 @@ import { toast } from 'sonner'
 interface FormulaPanelProps { formulas: FormulaItem[]; taskId?: string | number; searchQuery?: string }
 
 type CopyFormat = 'latex' | 'mathml' | 'unicodemath'
-const COPY_MAP: Record<CopyFormat, string> = { latex: 'LaTeX', mathml: 'MathML', unicodemath: 'UnicodeMath' }
-const COPY_SUCCESS: Record<CopyFormat, string> = { latex: 'LaTeX copied', mathml: 'MathML copied', unicodemath: 'UnicodeMath copied' }
+const COPY_MAP: Record<CopyFormat, string> = { latex: 'LaTeX', mathml: 'MathML', unicodemath: 'UMath' }
+const COPY_SUCCESS: Record<CopyFormat, string> = { latex: 'LaTeX copied', mathml: 'MathML copied', unicodemath: 'UMath copied' }
 
 function FormulaPreview({ latex }: { latex: string }) {
-  const html = useMemo(() => katex.renderToString(latex || '', { displayMode: true, throwOnError: false, strict: false, output: 'html' }), [latex])
-  return <div className='formula-card-body' dangerouslySetInnerHTML={{ __html: html }} />
+  const [svgUrl, setSvgUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let disposed = false
+    let objectUrl: string | null = null
+
+    setSvgUrl(null)
+    setFailed(false)
+    setLoading(false)
+    if (!latex.trim()) return
+
+    setLoading(true)
+    renderFormula(latex, 'svg')
+      .then(blob => {
+        if (disposed) return
+        objectUrl = URL.createObjectURL(blob)
+        setSvgUrl(objectUrl)
+      })
+      .catch(() => {
+        if (!disposed) setFailed(true)
+      })
+      .finally(() => {
+        if (!disposed) setLoading(false)
+      })
+
+    return () => {
+      disposed = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [latex])
+
+  return (
+    <div className={cn('formula-card-body', failed && 'formula-card-body-fallback')}>
+      {loading && (
+        <div className='formula-preview-loading'>
+          <Loader2 size={14} className='animate-spin' />
+          Rendering
+        </div>
+      )}
+      {!loading && svgUrl && <img className='formula-preview-img' src={svgUrl} alt='Rendered formula' />}
+      {!loading && failed && <code className='formula-preview-source'>{latex}</code>}
+    </div>
+  )
 }
 
 function resolveFormulaBlock(formula: FormulaItem, blocks: Block[]) {

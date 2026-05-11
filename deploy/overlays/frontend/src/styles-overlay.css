@@ -507,19 +507,38 @@ svg { display: block; width: 16px; height: 16px; }
 }
 .formula-card-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 10px;
+  gap: 10px; margin-bottom: 10px;
 }
-.formula-card-id { font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono); }
+.formula-card-id {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono);
+}
 .formula-card-body {
   background: var(--color-bg-subtle); border-radius: var(--r-sm);
   padding: 14px 16px; font-family: var(--font-mono); font-size: 14px;
   text-align: center; overflow-x: auto;
+  min-height: 76px; display: flex; align-items: center; justify-content: center;
 }
-.formula-card-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.formula-card-body-fallback { justify-content: flex-start; text-align: left; }
+.formula-preview-img {
+  display: block; max-width: 100%; height: auto; margin: 0 auto;
+}
+.formula-preview-loading {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; color: var(--color-text-muted); font-size: 11px;
+  font-family: var(--font-sans);
+}
+.formula-preview-source {
+  display: block; width: 100%; white-space: pre-wrap; overflow-wrap: anywhere;
+  color: var(--color-text-secondary); font-size: 12px; line-height: 1.5;
+}
+.formula-card-actions {
+  display: grid; grid-template-columns: repeat(3, 68px); gap: 4px; flex-shrink: 0;
+}
 .formula-copy-btn {
-  height: 26px; padding: 0 8px; font-size: 11px; font-weight: 500;
+  width: 68px; height: 26px; padding: 0 6px; font-size: 11px; font-weight: 500;
   color: var(--color-text-secondary); border: 1px solid var(--color-border);
-  border-radius: var(--r-sm); display: inline-flex; align-items: center; gap: 4px;
+  border-radius: var(--r-sm); display: inline-flex; align-items: center; justify-content: center; gap: 4px;
   transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 .formula-copy-btn:hover { background: var(--color-accent-subtle); color: var(--color-accent); border-color: var(--color-accent); }

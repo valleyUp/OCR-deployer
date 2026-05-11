@@ -179,7 +179,7 @@ export async function getTaskFormulas(taskId: string | number): Promise<TaskForm
 	return response.data.data
 }
 
-export type FormulaFormat = 'latex' | 'mathml' | 'unicodemath' | 'png'
+export type FormulaFormat = 'latex' | 'mathml' | 'unicodemath' | 'svg' | 'png'
 
 export async function renderFormula(
 	latex: string,

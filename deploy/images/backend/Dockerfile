@@ -32,6 +32,15 @@ RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.li
     fonts-wqy-zenhei \
     nodejs \
     npm \
+    texlive-latex-base \
+    texlive-latex-recommended \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    texlive-science \
+    texlive-luatex \
+    dvisvgm \
+    latexmk \
+    ghostscript \
     librsvg2-bin \
     && rm -rf /var/lib/apt/lists/* \
     && libreoffice --version \

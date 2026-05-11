@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
 	Check,
-	Clock,
-	FileText,
 	Loader2,
-	Sigma,
 	UploadCloud
 } from 'lucide-react'
 import { cn } from '@/libs/utils'
@@ -77,14 +74,9 @@ const STAGE_STEPS: { id: string; label: string; matchers: string[] }[] = [
 	}
 ]
 
-const MODE_OPTIONS: {
-	id: ProcessingMode
-	label: string
-	hint: string
-	icon: typeof FileText
-}[] = [
-	{ id: 'pipeline', label: '文档 OCR', hint: '版面还原', icon: FileText },
-	{ id: 'formula', label: '公式识别', hint: 'LaTeX / MML', icon: Sigma }
+const MODE_OPTIONS: { id: ProcessingMode; label: string; hint: string }[] = [
+	{ id: 'pipeline', label: '文档 OCR', hint: 'pipeline' },
+	{ id: 'formula', label: '公式识别', hint: 'formula only' }
 ]
 
 const inferMimeTypeByName = (name: string): string => {
@@ -171,6 +163,7 @@ export function FileUpload({
 	const [isDragging, setIsDragging] = useState(false)
 	const [processingMode, setProcessingMode] =
 		useState<ProcessingMode>('pipeline')
+	const [pasteActive, setPasteActive] = useState(false)
 
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const pollingIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(
@@ -353,6 +346,8 @@ export function FileUpload({
 			const file = image.getAsFile()
 			if (!file) return
 			event.preventDefault()
+			setPasteActive(true)
+			window.setTimeout(() => setPasteActive(false), 900)
 			void handleFile(createClipboardImageFile(file))
 		}
 		window.addEventListener('paste', handlePaste)
@@ -366,90 +361,66 @@ export function FileUpload({
 		r => r.status === 'pending' || r.status === 'processing'
 	).length
 
-	/* Compute segment thumb position for spring-animated sliding pill */
-	const modeIndex = processingMode === 'formula' ? 1 : 0
-	const segmentThumbStyle = {
-		left: modeIndex === 0 ? '3px' : 'calc(50% + 1.5px)',
-		width: 'calc(50% - 4.5px)'
-	}
-
 	return (
 		<div className='flex shrink-0 flex-col'>
 			<div className='flex flex-col gap-4 p-5'>
 				{/* Heading */}
 				<div>
-					<h2 className='font-[family-name:var(--font-display)] text-[20px] font-semibold tracking-tight text-[#1A1A1A]'>
+					<h2 className='font-[family-name:var(--f-display)] text-[20px] font-semibold tracking-tight text-[#26231D]'>
 						新建任务
 					</h2>
-					<p className='mt-0.5 text-[12px] text-[#999]'>
+					<p className='mt-0.5 text-[12px] text-[#9A9286]'>
 						拖拽文件、点击或粘贴
 					</p>
 				</div>
 
-				{/* Segmented control — sliding pill with spring physics */}
-				<div className='segment-control'>
-					<div className='segment-thumb' style={segmentThumbStyle} />
-					{MODE_OPTIONS.map(option => {
-						const active = processingMode === option.id
-						const Icon = option.icon
-						return (
-							<button
-								key={option.id}
-								type='button'
-								aria-pressed={active}
-								onClick={() => setProcessingMode(option.id)}
-								className='segment-btn'>
-								<Icon
-									className={cn(
-										'size-4 transition-colors duration-300',
-										active && option.id === 'formula' && 'text-violet-500',
-										active && option.id === 'pipeline' && 'text-indigo-500'
-									)}
-								/>
-								<span>{option.label}</span>
-								<span className='segment-hint'>{option.hint}</span>
-							</button>
-						)
-					})}
+				{/* Mode Switch — Scheme B card + sliding thumb */}
+				<div className='card mode-card'>
+					<p className='section-title'>processing mode</p>
+					<div className='mode-switch' data-mode={processingMode}>
+						<span className='mode-thumb' aria-hidden='true' />
+						{MODE_OPTIONS.map(option => {
+							const active = processingMode === option.id
+							return (
+								<button
+									key={option.id}
+									type='button'
+									aria-pressed={active}
+									onClick={() => setProcessingMode(option.id)}
+									className='mode-button interactive'>
+									<strong>{option.label}</strong>
+									<span>{option.hint}</span>
+								</button>
+							)
+						})}
+					</div>
 				</div>
 
-				{/* Drop zone */}
+				{/* Upload Zone */}
 				<div
-					className={cn(
-						'drop-zone',
-						isDragging && 'is-drag'
-					)}
+					className={cn('upload-zone interactive', pasteActive && 'is-paste')}
 					onDragOver={handleDragOver}
 					onDragLeave={handleDragLeave}
 					onDrop={handleDrop}
 					onClick={() => fileInputRef.current?.click()}>
-					<div className='drop-zone-icon'>
-						<UploadCloud
-							className={cn(
-								'size-6 transition-transform duration-300',
-								isDragging && 'motion-safe:animate-bounce'
-							)}
-						/>
+					<div>
+						<div className='upload-icon'>
+							<UploadCloud className='size-6' />
+						</div>
+						<p className='upload-title'>
+							{isDragging ? '松手上传' : 'Drop / Paste'}
+						</p>
+						<p className='upload-copy'>
+							{processingMode === 'formula'
+								? '公式任务会过滤 equation 之外的版面块，并默认打开公式结果。'
+								: '文档任务保留标题、正文、表格与公式，并默认打开 Markdown 结果。'}
+						</p>
+						<div className='chips'>
+							<span className='mono-chip'>PNG</span>
+							<span className='mono-chip'>PDF</span>
+							<span className='mono-chip'>clipboard</span>
+						</div>
 					</div>
-					<p className='text-[15px] font-medium text-[#1A1A1A]'>
-						{isDragging ? '松手上传' : '拖拽或点击上传'}
-					</p>
-					<p className='mt-1 text-[12px] text-[#999]'>
-						{processingMode === 'formula'
-							? '识别公式，输出 LaTeX / MathML'
-							: '版面还原，输出 Markdown + bbox'}
-					</p>
-					<div className='mt-3 flex flex-wrap items-center justify-center gap-3 text-[11px] text-[#999]'>
-						<span className='pill px-2.5 py-0.5 text-[11px]'>PNG · JPG · PDF</span>
-						<span className='pill px-2.5 py-0.5 text-[11px]'>最大 {maxUploadMb} MB</span>
-					</div>
-					<p className='mt-3 flex items-center justify-center gap-1 text-[11px] text-[#999]'>
-						<kbd>⌘</kbd>
-						<span>/</span>
-						<kbd>Ctrl</kbd>
-						<kbd>V</kbd>
-						<span className='ml-1'>粘贴图片</span>
-					</p>
 				</div>
 
 				<input
@@ -461,23 +432,85 @@ export function FileUpload({
 					onChange={handleFileInput}
 				/>
 
+				{/* Runtime Settings Sliders */}
+				<div className='card settings-card'>
+					<h2>Runtime</h2>
+					<div className='settings-grid'>
+						<label className='slider-row'>
+							<span>Precision</span>
+							<input
+								className='slider-precision'
+								type='range'
+								min='0'
+								max='100'
+								defaultValue='68'
+							/>
+							<output>68%</output>
+						</label>
+						<label className='slider-row'>
+							<span>Priority</span>
+							<input
+								className='slider-data'
+								type='range'
+								min='0'
+								max='5'
+								defaultValue='4'
+							/>
+							<output>P4</output>
+						</label>
+						<label className='slider-row'>
+							<span>Preview</span>
+							<input
+								className='slider-volume'
+								type='range'
+								min='1'
+								max='10'
+								defaultValue='7'
+							/>
+							<output>7/10</output>
+						</label>
+						<label className='slider-row'>
+							<span>Palette</span>
+							<input
+								className='slider-spectrum'
+								type='range'
+								min='0'
+								max='360'
+								defaultValue='248'
+							/>
+							<output>248°</output>
+						</label>
+						<label className='slider-row'>
+							<span>Page</span>
+							<input
+								className='slider-notch'
+								type='range'
+								min='1'
+								max='12'
+								defaultValue='3'
+							/>
+							<output>p3</output>
+						</label>
+					</div>
+				</div>
+
 				{pendingCount > 0 && (
-					<div className='flex items-center justify-between rounded-full border border-[rgba(79,70,229,0.18)] bg-[rgba(79,70,229,0.06)] px-3 py-2 text-[12px] font-medium text-[#4F46E5]'>
+					<div className='flex items-center justify-between rounded-lg border border-[rgba(37,99,235,0.18)] bg-[rgba(37,99,235,0.06)] px-3 py-2 text-[12px] font-medium text-[#2563EB]'>
 						<span>{pendingCount} 个任务处理中</span>
 						<Loader2 className='size-3.5 animate-spin' />
 					</div>
 				)}
 			</div>
 
-			{/* Pipeline timeline — springs in when active */}
+			{/* Pipeline timeline */}
 			{showTimeline && activeRecord && (
-				<div className='mx-5 mb-5 rounded-xl border border-[rgba(0,0,0,0.08)] bg-white/80 p-4 shadow-sm'>
+				<div className='mx-5 mb-5 rounded-xl border border-[rgba(38,35,29,0.10)] bg-white/80 p-4 shadow-sm'>
 					<div className='mb-3 flex items-center justify-between'>
-						<span className='flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#999]'>
-							<span className='size-1.5 rounded-full bg-[#4F46E5] shadow-[0_0_0_3px_rgba(79,70,229,0.2)]' />
+						<span className='flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9A9286]'>
+							<span className='size-1.5 rounded-full bg-[#2563EB] shadow-[0_0_0_3px_rgba(37,99,235,0.2)]' />
 							{activeRecord.currentStage || '排队中'}
 						</span>
-						<span className='text-[11px] font-medium tabular-nums text-[#999]'>
+						<span className='text-[11px] font-medium tabular-nums text-[#9A9286]'>
 							{Math.round(activeRecord.progress ?? 0)}%
 						</span>
 					</div>
@@ -503,9 +536,9 @@ export function FileUpload({
 											state === 'done' &&
 												'bg-emerald-500 text-white',
 											state === 'active' &&
-												'bg-[#4F46E5] text-white shadow-[0_0_0_4px_rgba(79,70,229,0.16)]',
+												'bg-[#2563EB] text-white shadow-[0_0_0_4px_rgba(37,99,235,0.16)]',
 											state === 'idle' &&
-												'bg-[rgba(0,0,0,0.06)] text-[#999]'
+												'bg-[rgba(38,35,29,0.08)] text-[#9A9286]'
 										)}
 										style={
 											state === 'active'
@@ -522,8 +555,8 @@ export function FileUpload({
 										className={cn(
 											'text-[12.5px] transition-colors duration-300',
 											state === 'idle'
-												? 'text-[#999]'
-												: 'text-[#1A1A1A] font-medium'
+												? 'text-[#9A9286]'
+												: 'text-[#26231D] font-medium'
 										)}>
 										{step.label}
 									</span>

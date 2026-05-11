@@ -1,6 +1,6 @@
 /**
  * Motion tokens — spring-physics curves & timing system.
- * Aligned with the 方案 A design spec.
+ * Aligned with the Scheme B Structured design spec.
  */
 
 /* Spring — responsive with overshoot. Use for buttons, toggles, card reveals. */

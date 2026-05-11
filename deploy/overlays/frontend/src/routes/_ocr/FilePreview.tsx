@@ -85,6 +85,11 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 		offsetY: 0
 	})
 
+	const processingMode =
+		result?.response?.processing_mode ||
+		result?.response?.metadata?.processing_mode ||
+		file?.processingMode
+
 	useEffect(() => {
 		if (!imageRef.current || isPdfFile) return
 
@@ -185,22 +190,39 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 
 	if (!file) {
 		return (
-			<div className='flex h-full items-center justify-center bg-[#F9F9F7]'>
-				<div className='card-default max-w-sm rounded-xl border border-dashed border-[rgba(0,0,0,0.12)] bg-white/50 px-8 py-10 text-center backdrop-blur-sm'>
-					<span className='mx-auto mb-4 flex size-14 items-center justify-center rounded-xl bg-[rgba(79,70,229,0.10)] text-[#4F46E5]'>
-						<FileText className='size-7' />
-					</span>
-					<p className='text-[16px] font-semibold text-[#1A1A1A]'>等待文件</p>
-					<p className='mt-1 text-[12px] leading-5 text-[#999999]'>
-						从左侧上传、拖拽或粘贴图片开始
-					</p>
+			<div className='workspace'>
+				<header className='workspace-head'>
+					<div className='crumbs'>
+						<span>task</span>
+						<span>/</span>
+						<strong>—</strong>
+					</div>
+				</header>
+				<div className='preview-scroll sb-accent'>
+					<div className='preview-stage'>
+						<article className='page-canvas'>
+							<h2 className='doc-title'>Drop a file to begin</h2>
+							<div className='doc-line wide' />
+							<div className='doc-line mid' />
+							<div className='doc-line short' />
+							<div className='formula-block' data-label='eq 01'>
+								E = mc² + ∫₀ᵀ λ(t)dt
+							</div>
+							<div className='doc-line wide' />
+							<div className='doc-line wide' />
+							<div className='formula-block' data-label='eq 02'>
+								∇ · (κ∇u) + f = 0
+							</div>
+							<div className='doc-line mid' />
+						</article>
+					</div>
 				</div>
 			</div>
 		)
 	}
 
 	const imageToolbar = isImageFile ? (
-		<div className='pointer-events-auto absolute right-4 top-4 z-20 flex items-center gap-1 rounded-full border border-[rgba(0,0,0,0.08)] bg-white/85 px-1 py-1 shadow-sm backdrop-blur-xl'>
+		<div className='pointer-events-auto absolute right-4 top-4 z-20 flex items-center gap-1 rounded-full border border-[rgba(38,35,29,0.10)] bg-white/85 px-1 py-1 shadow-sm backdrop-blur-xl'>
 			<Button
 				variant='ghost'
 				size='icon-sm'
@@ -214,7 +236,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 				}>
 				<Minus className='size-4' />
 			</Button>
-			<span className='min-w-[3.25rem] text-center text-[11px] tabular-nums text-[#6B6B6B]'>
+			<span className='min-w-[3.25rem] text-center text-[11px] tabular-nums text-[#6F685D]'>
 				{Math.round(imageZoom * 100)}%
 			</span>
 			<Button
@@ -230,7 +252,7 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 				}>
 				<Plus className='size-4' />
 			</Button>
-			<span className='mx-1 h-4 w-px bg-[rgba(0,0,0,0.08)]' aria-hidden='true' />
+			<span className='mx-1 h-4 w-px bg-[rgba(38,35,29,0.10)]' aria-hidden='true' />
 			<Button
 				variant='ghost'
 				size='icon-sm'
@@ -254,109 +276,124 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 	) : null
 
 	return (
-		<div className='relative flex h-full flex-col overflow-hidden'>
-			{imageToolbar}
+		<div className='workspace'>
+			<header className='workspace-head'>
+				<div className='crumbs'>
+					<span>task</span>
+					<span>/</span>
+					<strong>{file.name}</strong>
+				</div>
+				<div className='chips' style={{ marginTop: 0 }}>
+					<span className='mono-chip'>processing_mode={processingMode || 'pipeline'}</span>
+					<span className='mono-chip'>layout_device=cuda:0</span>
+				</div>
+			</header>
 
-			<div className='surface-toolbar flex h-12 shrink-0 items-center justify-between gap-4 px-5'>
-				<div className='flex min-w-0 items-center gap-3'>
-					<span
-						className={cn(
-							'flex size-9 shrink-0 items-center justify-center rounded-lg',
-							isPdfFile ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'
-						)}>
+			<div className='preview-scroll sb-accent'>
+				<div className='preview-stage'>
+					{/* Toolbar row */}
+					<div className='flex items-center justify-between gap-4'>
+						<div className='flex min-w-0 items-center gap-3'>
+							<span
+								className={cn(
+									'icon-wrap shrink-0',
+									isPdfFile ? 'icon-danger' : 'icon-primary'
+								)}>
+								{isPdfFile ? (
+									<FileText className='size-[18px]' />
+								) : (
+									<FileImage className='size-[18px]' />
+								)}
+							</span>
+							<div className='min-w-0'>
+								<p className='job-name'>{file.name}</p>
+								<p className='job-meta'>
+									{formatFileSize(file.size)} · {isPdfFile ? 'PDF' : 'Image'}
+								</p>
+							</div>
+						</div>
+						<div className='flex shrink-0 items-center gap-2'>
+							<span className='status-pill status-info'>
+								<LocateFixed className='size-3' />
+								{activeBlock?.layoutType || '预览'}
+							</span>
+							<span
+								className={cn(
+									'status-pill',
+									result?.status === 'completed'
+										? 'status-ok'
+										: result?.status === 'failed'
+											? 'status-warn'
+											: 'status-info'
+								)}>
+								{result?.status === 'completed'
+									? '已完成'
+									: result?.status === 'failed'
+										? '识别失败'
+										: result?.status === 'processing'
+											? '识别中'
+											: '待识别'}
+							</span>
+						</div>
+					</div>
+
+					{/* Preview content */}
+					<div className='relative flex min-h-0 flex-col overflow-hidden' ref={viewerRef}>
+						{imageToolbar}
 						{isPdfFile ? (
-							<FileText className='size-[18px]' />
-						) : (
-							<FileImage className='size-[18px]' />
-						)}
-					</span>
-					<div className='min-w-0'>
-						<p className='truncate text-[13px] font-semibold text-[#1A1A1A]'>
-							{file.name}
-						</p>
-						<p className='mt-0.5 text-[11px] text-[#999999]'>
-							{formatFileSize(file.size)} · {isPdfFile ? 'PDF' : 'Image'}
-						</p>
-					</div>
-				</div>
-				<div className='flex shrink-0 items-center gap-2'>
-					<span className='pill h-8 px-3 text-[11px] font-medium text-[#6B6B6B]'>
-						<LocateFixed className='size-3.5 text-indigo-600' />
-						{activeBlock?.layoutType || '预览'}
-					</span>
-					<span
-						className={cn(
-							'pill h-8 px-3 text-[11px] font-medium',
-							result?.status === 'completed'
-								? 'text-[#16A34A]'
-								: result?.status === 'failed'
-									? 'text-[#DC2626]'
-									: 'text-[#6B6B6B]'
-						)}>
-						{result?.status === 'completed'
-							? '已完成'
-							: result?.status === 'failed'
-								? '识别失败'
-								: result?.status === 'processing'
-									? '识别中'
-									: '待识别'}
-					</span>
-				</div>
-			</div>
-
-			<div className='flex-1 min-h-0 overflow-hidden' ref={viewerRef}>
-				{isPdfFile ? (
-					<PdfViewer
-						file={file.file}
-						className='h-full'
-						renderPageOverlay={renderPdfPageOverlay}
-						onPageClick={(e, pageNumber) =>
-							handlePdfClick(e, pageNumber, pdfOriginalWidth, pdfOriginalHeight)
-						}
-						onPageMouseMove={(e, pageNumber) =>
-							handlePdfMouseMove(e, pageNumber, pdfOriginalWidth, pdfOriginalHeight)
-						}
-						onPageMouseLeave={handlePdfMouseLeave}
-					/>
-				) : isImageFile && pdfUrl ? (
-					<div
-						className={cn(
-							'scrollbar-thin relative flex h-full cursor-pointer items-center justify-center overflow-auto bg-[#F9F9F7] p-6',
-							imageZoom > 1 && 'cursor-grab'
-						)}
-						onClick={handleImageClick}
-						onMouseMove={handleImageMouseMove}
-						onMouseLeave={handleImageMouseLeave}>
-						<img
-							ref={imageRef}
-							src={pdfUrl}
-							alt={file.name}
-							className='max-h-full max-w-full rounded-[12px] object-contain shadow-md ring-1 ring-black/5 transition-transform duration-200 ease-out'
-							style={{
-								transform: `scale(${imageZoom}) rotate(${imageRotation}deg)`,
-								transformOrigin: 'center center'
-							}}
-						/>
-						{activeBlock && activeBlock.bbox && imageRotation === 0 && imageZoom === 1 && (
-							<HighlightOverlay
-								block={activeBlock}
-								showCopyButton={showCopyButton}
-								state={activeState}
-								style={{
-									left: imageScale.offsetX + activeBlock.bbox[0] * imageScale.x,
-									top: imageScale.offsetY + activeBlock.bbox[1] * imageScale.y,
-									width: activeBlock.width * imageScale.x,
-									height: activeBlock.height * imageScale.y
-								}}
-								copyButtonClassName='right-6'
+							<PdfViewer
+								file={file.file}
+								className='h-full'
+								renderPageOverlay={renderPdfPageOverlay}
+								onPageClick={(e, pageNumber) =>
+									handlePdfClick(e, pageNumber, pdfOriginalWidth, pdfOriginalHeight)
+								}
+								onPageMouseMove={(e, pageNumber) =>
+									handlePdfMouseMove(e, pageNumber, pdfOriginalWidth, pdfOriginalHeight)
+								}
+								onPageMouseLeave={handlePdfMouseLeave}
 							/>
+						) : isImageFile && pdfUrl ? (
+							<div
+								className={cn(
+									'scrollbar-thin relative flex h-full cursor-pointer items-center justify-center overflow-auto bg-[#F7F5EE] p-6',
+									imageZoom > 1 && 'cursor-grab'
+								)}
+								onClick={handleImageClick}
+								onMouseMove={handleImageMouseMove}
+								onMouseLeave={handleImageMouseLeave}>
+								<img
+									ref={imageRef}
+									src={pdfUrl}
+									alt={file.name}
+									className='max-h-full max-w-full rounded-lg object-contain shadow-md ring-1 ring-black/5 transition-transform duration-200 ease-out'
+									style={{
+										transform: `scale(${imageZoom}) rotate(${imageRotation}deg)`,
+										transformOrigin: 'center center'
+									}}
+								/>
+								{activeBlock && activeBlock.bbox && imageRotation === 0 && imageZoom === 1 && (
+									<HighlightOverlay
+										block={activeBlock}
+										showCopyButton={showCopyButton}
+										state={activeState}
+										style={{
+											left: imageScale.offsetX + activeBlock.bbox[0] * imageScale.x,
+											top: imageScale.offsetY + activeBlock.bbox[1] * imageScale.y,
+											width: activeBlock.width * imageScale.x,
+											height: activeBlock.height * imageScale.y
+										}}
+										copyButtonClassName='right-6'
+									/>
+								)}
+							</div>
+						) : (
+							<div className='flex h-full items-center justify-center bg-[#F7F5EE] text-sm text-[#9A9286]'>
+								<p>不支持的文件格式</p>
+							</div>
 						)}
 					</div>
-				) : (
-					<div className='flex h-full items-center justify-center bg-[#F9F9F7] text-sm text-[#999999]'>
-						<p>不支持的文件格式</p>
-					</div>
-				)}
+				</div>
 			</div>
 		</div>
 	)

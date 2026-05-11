@@ -1,23 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { TaskResponse } from './FileUpload'
 import { MarkdownPreview } from '@/components/ocr/MarkdownPreview'
 import { useOcrStore } from '../../store/useOcrStore'
 import {
-	AppWindowIcon,
-	CheckIcon,
-	CopyIcon,
 	DownloadIcon,
-	FileJsonIcon,
 	FileTextIcon,
-	Hash,
 	Layers,
 	Sigma,
 	Timer,
 	Workflow
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { JsonPreview } from '@/components/ocr/JsonPreview'
@@ -63,8 +56,6 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 	const [activeTab, setActiveTab] = useState<ResultTab>('markdown')
 	const autoSwitchedRef = useRef(false)
 	const autoSwitchTaskRef = useRef<string | number | null>(null)
-
-	const [copiedAt, setCopiedAt] = useState<'copy' | 'download' | null>(null)
 
 	const layout = useMemo(() => result?.response?.layout || [], [result?.response?.layout])
 	const images = useMemo(() => result?.response?.images || {}, [result?.response?.images])
@@ -161,8 +152,6 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 		result?.response?.metadata?.processing_mode
 	])
 
-	// When the user clicks a formula block in the preview pane, switch the
-	// active tab to "formulas" so the matching card is visible.
 	const clickedPdfBlockId = useOcrStore(s => s.clickedPdfBlockId)
 	useEffect(() => {
 		if (clickedPdfBlockId === null) return
@@ -172,18 +161,6 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 			setActiveTab('formulas')
 		}
 	}, [clickedPdfBlockId, blocks])
-
-	const handleCopy = async () => {
-		if (!result?.response?.full_markdown) return
-		try {
-			await navigator.clipboard.writeText(result.response.full_markdown)
-			setCopiedAt('copy')
-			toast.success('Markdown 已复制')
-			window.setTimeout(() => setCopiedAt(null), 1200)
-		} catch {
-			toast.error('复制失败')
-		}
-	}
 
 	const handleDownload = () => {
 		if (!result?.response?.full_markdown) return
@@ -196,9 +173,7 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 		a.download = `${fileName || 'result'}.md`
 		a.click()
 		URL.revokeObjectURL(url)
-		setCopiedAt('download')
 		toast.success('下载已开始')
-		window.setTimeout(() => setCopiedAt(null), 1200)
 	}
 
 	const response = result?.response
@@ -207,7 +182,6 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 
 	const metadata = response?.metadata
 	const totalPages = metadata?.total_pages ?? layout.reduce((max: number, b: any) => Math.max(max, b.page_index ?? 1), 0)
-	const totalChars = response?.full_markdown?.length ?? 0
 	const executionSeconds = response?.execution_time ?? response?.result?.execution_time
 	const processingMode =
 		response?.processing_mode || metadata?.processing_mode || 'pipeline'
@@ -235,13 +209,6 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 								label: `${formulas.length} 公式`
 							}
 						: null,
-					totalChars
-						? {
-								key: 'chars',
-								icon: Hash,
-								label: `${totalChars.toLocaleString()} 字`
-							}
-						: null,
 					typeof executionSeconds === 'number'
 						? {
 								key: 'time',
@@ -253,161 +220,157 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 			: []
 
 	return (
-		<div className="flex h-full flex-col bg-[#F9F9F7]">
-			<Tabs
-				value={activeTab}
-				onValueChange={value => setActiveTab(value as ResultTab)}
-				className='flex flex-1 flex-col overflow-hidden'>
-				<div className='surface-toolbar sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-2.5'>
-					<TabsList
-						className='relative grid h-9 grid-cols-3 gap-0.5 rounded-lg bg-[rgba(0,0,0,0.04)] p-1'
-						>
-						{/* Sliding pill */}
-						<div
-							className='tab-thumb'
-							style={{
-								left: activeTab === 'markdown' ? '4px' : activeTab === 'json' ? 'calc(33.333% + 0.67px)' : 'calc(66.667% - 0.67px)',
-								width: 'calc(33.333% - 4px)'
-							}}
-						/>
-						<TabsTrigger
-							value='markdown'
-							className='tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-md px-1 text-[12.5px] font-medium text-[#999999] transition-colors duration-300 data-[state=active]:text-[#1A1A1A]'>
-							<AppWindowIcon className='size-3.5' />
-							Markdown
-						</TabsTrigger>
-						<TabsTrigger
-							value='json'
-							className='tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-md px-1 text-[12.5px] font-medium text-[#999999] transition-colors duration-300 data-[state=active]:text-[#1A1A1A]'>
-							<FileJsonIcon className='size-3.5' />
-							JSON
-						</TabsTrigger>
-						<TabsTrigger
-							value='formulas'
-							className='tab-trigger z-10 h-7 cursor-pointer gap-1.5 rounded-md px-1 text-[12.5px] font-medium text-[#999999] transition-colors duration-300 data-[state=active]:text-[#1A1A1A]'>
-							<Sigma className='size-3.5' />
-							公式
-						</TabsTrigger>
-					</TabsList>
+		<div className='flex h-full flex-col'>
+			{/* Header */}
+			<header className='result-head'>
+				<div className='result-title'>
+					<h1>Recognition Result</h1>
+					<p>
+						{processingMode === 'formula'
+							? 'equation blocks only · formula tab active'
+							: 'full layout · markdown tab active'}
+					</p>
+				</div>
+				<button className='btn-outline' onClick={handleDownload}>
+					<DownloadIcon className='size-4' />
+					Export ZIP
+				</button>
+			</header>
 
+			{/* Tab switcher — sliding pill */}
+			<div className='tab-shell'>
+				<div className='tab-list' role='tablist' data-active={activeTab}>
+					<span className='result-thumb' aria-hidden='true' />
+					<button
+						className='result-tab interactive'
+						role='tab'
+						aria-selected={activeTab === 'markdown'}
+						onClick={() => setActiveTab('markdown')}>
+						Markdown
+					</button>
+					<button
+						className='result-tab interactive'
+						role='tab'
+						aria-selected={activeTab === 'json'}
+						onClick={() => setActiveTab('json')}>
+						JSON
+					</button>
+					<button
+						className='result-tab interactive'
+						role='tab'
+						aria-selected={activeTab === 'formulas'}
+						onClick={() => setActiveTab('formulas')}>
+						公式
+					</button>
+				</div>
+			</div>
+
+			{/* Meta badges */}
+			{metaBadges.length > 0 && (
+				<div className='flex flex-wrap items-center gap-1.5 border-b border-[rgba(38,35,29,0.06)] bg-[rgba(255,255,255,0.6)] px-4 py-2'>
+					{metaBadges.map(item => {
+						const Icon = item.icon
+						return (
+							<Badge
+								key={item.key}
+								variant='outline'
+								className='pill h-6 gap-1 px-2 text-[11px] font-medium'>
+								<Icon className='size-3' />
+								{item.label}
+							</Badge>
+						)
+					})}
+				</div>
+			)}
+
+			{/* Content panels */}
+			<div className='panel-scroll sb-line'>
+				{/* Markdown panel */}
+				<section className={cn('tab-panel', activeTab === 'markdown' && 'active')}>
 					{status === 'completed' && (
-						<div className='flex items-center gap-1.5'>
-							<Button
-								variant='ghost'
-								size='icon-sm'
-								className='btn-icon size-8 text-[#6B6B6B]'
-								aria-label='复制 Markdown'
-								onClick={handleCopy}>
-								{copiedAt === 'copy' ? (
-									<CheckIcon className='size-4 text-[#16A34A]' />
-								) : (
-									<CopyIcon className='size-4' />
-								)}
-							</Button>
-							<Button
-								variant='ghost'
-								size='icon-sm'
-								className='btn-icon size-8 text-[#6B6B6B]'
-								aria-label='下载 Markdown'
-								onClick={handleDownload}>
-								{copiedAt === 'download' ? (
-									<CheckIcon className='size-4 text-[#16A34A]' />
-								) : (
-									<DownloadIcon className='size-4' />
-								)}
-							</Button>
+						<div className='summary-grid'>
+							<div className='metric'>
+								<strong>{layout.length}</strong>
+								<span>blocks</span>
+							</div>
+							<div className='metric'>
+								<strong>{String(totalPages).padStart(2, '0')}</strong>
+								<span>page</span>
+							</div>
+							<div className='metric'>
+								<strong>{processingMode === 'formula' ? '100%' : String(formulas.length)}</strong>
+								<span>formula</span>
+							</div>
 						</div>
 					)}
-				</div>
-
-				{metaBadges.length > 0 && (
-					<div className='flex flex-wrap items-center gap-1.5 border-b border-[rgba(0,0,0,0.08)] bg-[rgba(255,255,255,0.6)] px-4 py-2'>
-						{metaBadges.map(item => {
-							const Icon = item.icon
-							return (
-								<Badge
-									key={item.key}
-									variant='outline'
-									className='pill h-6 gap-1 px-2 text-[11px] font-medium'>
-									<Icon className='size-3' />
-									{item.label}
-								</Badge>
-							)
-						})}
-					</div>
-				)}
-
-				<div className='flex-1 overflow-hidden'>
-					<div className='tab-content-enter h-full' key={activeTab}>
-					<TabsContent value='markdown' className='h-full m-0 mt-0'>
-						{status === 'pending' || status === 'processing' ? (
-							<div className='scrollbar-thin h-full overflow-auto'>
-								<MarkdownSkeleton />
-							</div>
-						) : blocks.length > 0 && status === 'completed' ? (
-							<MarkdownPreview />
-						) : status === 'completed' ? (
-							<div className='flex h-full items-center justify-center'>
-								<div className='rounded-xl border border-dashed border-[rgba(0,0,0,0.12)] bg-white/50 p-5 text-center text-sm text-[#999999]'>
-									<p>暂无 Markdown 内容</p>
-								</div>
-							</div>
-						) : status === 'failed' ? (
-							<div className='flex h-full items-center justify-center'>
-								<div className='max-w-xs rounded-xl border border-red-200 bg-red-50/90 p-4 text-center text-sm text-[#DC2626]'>
-									<p className='font-medium'>解析失败</p>
-									{errorMessage && (
-										<p className='mt-1 break-all text-[12px] text-red-500/90'>
-											{errorMessage}
-										</p>
-									)}
-								</div>
-							</div>
-						) : (
-							<div className='flex h-full items-center justify-center'>
-								<div className='flex flex-col items-center gap-2 rounded-xl border border-dashed border-[rgba(0,0,0,0.12)] bg-white/50 p-5 text-center text-sm text-[#999999]'>
-									<FileTextIcon className='size-8 text-[#999999]' />
-									<p>请先上传文件并等待处理完成</p>
-								</div>
-							</div>
-						)}
-					</TabsContent>
-
-					<TabsContent value='json' className='scrollbar-thin h-full m-0 mt-0 overflow-auto'>
-						<div className={cn('p-4')}>
-							{response && status === 'completed' ? (
-								<div className='overflow-auto rounded-xl border border-[rgba(0,0,0,0.08)] bg-[rgba(255,255,255,0.8)] p-4'>
-									<JsonPreview json={response} />
-								</div>
-							) : status === 'pending' || status === 'processing' ? (
-								<div className='space-y-2'>
-									<Skeleton className='h-3 w-[60%]' />
-									<Skeleton className='h-3 w-[82%]' />
-									<Skeleton className='h-3 w-[54%]' />
-									<Skeleton className='h-3 w-[76%]' />
-								</div>
-							) : (
-								<div className='flex h-full items-center justify-center text-sm text-[#999999]'>
-									<p>暂无数据</p>
-								</div>
-							)}
+					{status === 'pending' || status === 'processing' ? (
+						<div className='scrollbar-thin overflow-auto'>
+							<MarkdownSkeleton />
 						</div>
-					</TabsContent>
-
-					<TabsContent value='formulas' className='h-full m-0 mt-0 overflow-hidden'>
-						{status === 'completed' ? (
-							<FormulaPanel formulas={formulas} taskId={response?.task_id} />
-						) : (
-							<div className='flex h-full items-center justify-center'>
-								<div className='rounded-xl border border-dashed border-[rgba(0,0,0,0.12)] bg-white/50 p-5 text-center text-sm text-[#999999]'>
-									<p>暂无公式</p>
-								</div>
+					) : blocks.length > 0 && status === 'completed' ? (
+						<div className='card markdown-card'>
+							<MarkdownPreview />
+						</div>
+					) : status === 'completed' ? (
+						<div className='flex items-center justify-center py-20'>
+							<div className='rounded-xl border border-dashed border-[rgba(38,35,29,0.16)] bg-white/50 p-5 text-center text-sm text-[#9A9286]'>
+								<p>暂无 Markdown 内容</p>
 							</div>
-						)}
-					</TabsContent>
-				</div>
-				</div>
-			</Tabs>
+						</div>
+					) : status === 'failed' ? (
+						<div className='flex items-center justify-center py-20'>
+							<div className='max-w-xs rounded-xl border border-red-200 bg-red-50/90 p-4 text-center text-sm text-[#B91C1C]'>
+								<p className='font-medium'>解析失败</p>
+								{errorMessage && (
+									<p className='mt-1 break-all text-[12px] text-red-500/90'>
+										{errorMessage}
+									</p>
+								)}
+							</div>
+						</div>
+					) : (
+						<div className='flex items-center justify-center py-20'>
+							<div className='flex flex-col items-center gap-2 rounded-xl border border-dashed border-[rgba(38,35,29,0.16)] bg-white/50 p-5 text-center text-sm text-[#9A9286]'>
+								<FileTextIcon className='size-8 text-[#9A9286]' />
+								<p>请先上传文件并等待处理完成</p>
+							</div>
+						</div>
+					)}
+				</section>
+
+				{/* JSON panel */}
+				<section className={cn('tab-panel', activeTab === 'json' && 'active')}>
+					{response && status === 'completed' ? (
+						<div className='card json-card overflow-auto'>
+							<JsonPreview json={response} />
+						</div>
+					) : status === 'pending' || status === 'processing' ? (
+						<div className='space-y-2 p-4'>
+							<Skeleton className='h-3 w-[60%]' />
+							<Skeleton className='h-3 w-[82%]' />
+							<Skeleton className='h-3 w-[54%]' />
+							<Skeleton className='h-3 w-[76%]' />
+						</div>
+					) : (
+						<div className='flex items-center justify-center py-20 text-sm text-[#9A9286]'>
+							<p>暂无数据</p>
+						</div>
+					)}
+				</section>
+
+				{/* Formulas panel */}
+				<section className={cn('tab-panel', activeTab === 'formulas' && 'active')}>
+					{status === 'completed' ? (
+						<FormulaPanel formulas={formulas} taskId={response?.task_id} />
+					) : (
+						<div className='flex items-center justify-center py-20'>
+							<div className='rounded-xl border border-dashed border-[rgba(38,35,29,0.16)] bg-white/50 p-5 text-center text-sm text-[#9A9286]'>
+								<p>暂无公式</p>
+							</div>
+						</div>
+					)}
+				</section>
+			</div>
 		</div>
 	)
 }

@@ -108,53 +108,47 @@ export function OCRPage() {
 	}
 
 	return (
-		<div className='app-shell bg-[#F9F9F7]'>
-			{/* Outer padding gives the window a floating appearance */}
-			<div className='app-window p-2'>
-				<div className='surface-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl'>
-					<AppHeader uploadFile={uploadFile} result={parsedResult} />
+		<div className='app grid-bg glow-bg'>
+			<AppHeader uploadFile={uploadFile} result={parsedResult} />
 
-					{/* Main three-column layout */}
-					<div className='flex min-h-0 flex-1 overflow-hidden'>
-						{/* Sidebar */}
-						<aside className='surface-sidebar flex w-[272px] shrink-0 flex-col overflow-hidden rounded-bl-xl'>
-							<FileUpload
-								currentLocalId={currentLocalId}
-								onActiveTaskChange={localId => setCurrentLocalId(localId)}
-								onFileReady={handleFileReady}
-							/>
-							<HistoryPanel
-								currentLocalId={currentLocalId}
-								onSelect={record => setCurrentLocalId(record.localId)}
-							/>
-						</aside>
-
-						{/* Preview + Results */}
-						<main className='flex min-w-0 flex-1 overflow-hidden'>
-							<section className='flex min-w-0 flex-1 flex-col overflow-hidden'>
-								<FilePreview file={uploadFile} result={parsedResult} />
-							</section>
-
-							<ResizableDivider
-								value={resultsWidth}
-								onChange={setResultsWidth}
-								onCommit={persistResultsWidth}
-								onReset={resetResultsWidth}
-								min={RESULTS_WIDTH_MIN}
-								max={RESULTS_WIDTH_MAX}
-								direction='right'
-								ariaLabel='调整结果区宽度'
-							/>
-
-							<section
-								className='flex shrink-0 flex-col overflow-hidden border-l border-[rgba(0,0,0,0.08)]'
-								style={{ width: `${resultsWidth}px` }}>
-								<OCRResults result={parsedResult} fileName={uploadFile?.name} />
-							</section>
-						</main>
+			<main className='shell'>
+				{/* Sidebar */}
+				<aside className='sidebar'>
+					<div className='side-scroll sb-accent'>
+						<FileUpload
+							currentLocalId={currentLocalId}
+							onActiveTaskChange={localId => setCurrentLocalId(localId)}
+							onFileReady={handleFileReady}
+						/>
+						<HistoryPanel
+							currentLocalId={currentLocalId}
+							onSelect={record => setCurrentLocalId(record.localId)}
+						/>
 					</div>
-				</div>
-			</div>
+				</aside>
+
+				{/* Preview */}
+				<FilePreview file={uploadFile} result={parsedResult} />
+
+				{/* Resizable divider */}
+				<ResizableDivider
+					value={resultsWidth}
+					onChange={setResultsWidth}
+					onCommit={persistResultsWidth}
+					onReset={resetResultsWidth}
+					min={RESULTS_WIDTH_MIN}
+					max={RESULTS_WIDTH_MAX}
+					direction='right'
+					ariaLabel='调整结果区宽度'
+				/>
+
+				{/* Inspector / Results */}
+				<section
+					className='inspector'
+					style={{ width: `${resultsWidth}px`, minWidth: `${resultsWidth}px` }}>
+					<OCRResults result={parsedResult} fileName={uploadFile?.name} />
+				</section>
+			</main>
 		</div>
 	)
 }

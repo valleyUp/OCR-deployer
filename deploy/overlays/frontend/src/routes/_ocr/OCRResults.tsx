@@ -71,11 +71,15 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
     if (block?.formulaId || block?.layoutType?.includes('formula') || block?.latex) setActiveTab('formulas')
   }, [clickedPdfBlockId, blocks])
 
-  // Scroll result to linked block
+  // Scroll result to linked block + highlight pulse
   useEffect(() => {
     if (!activeLinkId) return
     const el = document.querySelector(`.result-content [data-block-id="${activeLinkId}"]`)
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('link-highlight')
+    const t = setTimeout(() => el.classList.remove('link-highlight'), 2600)
+    return () => { clearTimeout(t); el.classList.remove('link-highlight') }
   }, [activeLinkId])
 
   const handleDownload = () => {

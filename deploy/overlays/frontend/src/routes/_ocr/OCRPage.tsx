@@ -5,7 +5,6 @@ import { OCRResults } from './OCRResults'
 import { AppHeader } from '@/components/app/AppHeader'
 import { HistoryPanel } from '@/components/app/HistoryPanel'
 import { ResizableDivider } from '@/components/app/ResizableDivider'
-import { LinkBridge } from '@/components/link/LinkBridge'
 import { useHistoryStore } from '@/store/useHistoryStore'
 import { useConfigStore } from '@/store/useConfigStore'
 import type { HistoryRecord } from '@/libs/historyDb'
@@ -14,7 +13,7 @@ import '@/styles-overlay.css'
 const RESULTS_WIDTH_KEY = 'ocr:resultsWidth'
 const RESULTS_WIDTH_DEFAULT = 420
 const RESULTS_WIDTH_MIN = 300
-const RESULTS_WIDTH_MAX = 720
+const RESULTS_WIDTH_MAX = 9999
 
 function readStoredWidth(): number {
   try {
@@ -102,7 +101,6 @@ export function OCRPage() {
           <OCRResults result={parsedResult} fileName={uploadFile?.name} />
         </section>
       </main>
-      <LinkBridge />
     </div>
   )
 }

@@ -63,11 +63,15 @@ export function FilePreview({ file, result }: FilePreviewProps) {
     setPdfUrl(null)
   }, [file, isPdf, isImg])
 
-  // Link state: scroll preview to linked block
+  // Link state: scroll preview to linked block + highlight pulse
   useEffect(() => {
     if (!activeLinkId || !viewerRef.current) return
     const el = viewerRef.current.querySelector(`[data-block-id="${activeLinkId}"]`)
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('active')
+    const t = setTimeout(() => el.classList.remove('active'), 2600)
+    return () => { clearTimeout(t); el.classList.remove('active') }
   }, [activeLinkId])
 
   const renderOverlay = (pageNumber: number) => {

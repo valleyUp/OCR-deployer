@@ -12,15 +12,43 @@ import type { FormulaItem } from '@/libs/api'
 
 interface OCRResultsProps { result: TaskResponse | null; fileName?: string }
 type ResultTab = 'markdown' | 'json' | 'formulas'
+type ResultBlock = {
+  id: number
+  content: string
+  bbox: [number, number, number, number] | null
+  pageIndex: number
+  isImage: boolean
+  layoutType?: string
+  formulaId?: string
+  latex?: string
+  width: number
+  height: number
+}
+
+function isFormulaBlock(block: ResultBlock | undefined) {
+  if (!block) return false
+  return Boolean(block.formulaId || block.latex || String(block.layoutType || '').toLowerCase().includes('formula'))
+}
+
+function tabForPreviewTarget(block: ResultBlock | undefined, processingMode: string): ResultTab {
+  return processingMode === 'formula' && isFormulaBlock(block) ? 'formulas' : 'markdown'
+}
 
 export function OCRResults({ result, fileName }: OCRResultsProps) {
   const setBlocks = useOcrStore(s => s.setBlocks)
   const activeLinkId = useLinkStore(s => s.activeBlockId)
+  const linkSource = useLinkStore(s => s.source)
+  const linkEventId = useLinkStore(s => s.eventId)
   const [activeTab, setActiveTab] = useState<ResultTab>('markdown')
   const [searchQuery, setSearchQuery] = useState('')
   const autoSwitchedRef = useRef(false)
   const autoSwitchTaskRef = useRef<string | number | null>(null)
 
+  const response = result?.response; const status = result?.status; const errorMessage = result?.error_message
+  const metadata = response?.metadata
+  const totalPages = metadata?.total_pages ?? (result?.response?.layout || []).reduce((max: number, b: any) => Math.max(max, b.page_index ?? 1), 0)
+  const execSec = response?.execution_time ?? response?.result?.execution_time
+  const processingMode = response?.processing_mode || metadata?.processing_mode || 'pipeline'
   const layout = useMemo(() => result?.response?.layout || [], [result])
   const pageHeight = result?.response?.metadata?.height ?? 2339
   const images = useMemo(() => result?.response?.images || {}, [result?.response?.images])
@@ -38,7 +66,7 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
       }))
   }, [layout, result?.response?.formulas, result?.response?.task_id])
 
-  const blocks = useMemo(() => {
+  const blocks = useMemo<ResultBlock[]>(() => {
     if (result?.status !== 'completed') return []
     return layout.filter((b: any) => b.block_content?.trim()).map((b: any, i: number) => {
       const [x1, y1, x2, y2] = (b.bbox as [number, number, number, number]) || [0, 0, 0, 0]
@@ -58,29 +86,27 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
   useEffect(() => {
     const tid = result?.response?.task_id
     if (tid && autoSwitchTaskRef.current !== tid) { autoSwitchTaskRef.current = tid; autoSwitchedRef.current = false }
-    const pm = result?.response?.processing_mode || result?.response?.metadata?.processing_mode
-    if (!autoSwitchedRef.current && result?.status === 'completed' && pm === 'formula') { setActiveTab('formulas'); autoSwitchedRef.current = true }
-    else if (!autoSwitchedRef.current && result?.status === 'completed' && pm && pm !== 'formula' && activeTab === 'formulas') { setActiveTab('markdown'); autoSwitchedRef.current = true }
-  }, [activeTab, result?.status, result?.response?.task_id, result?.response?.processing_mode, result?.response?.metadata?.processing_mode])
+    if (!autoSwitchedRef.current && result?.status === 'completed') {
+      if (processingMode === 'formula') setActiveTab('formulas')
+      else if (activeTab === 'formulas') setActiveTab('markdown')
+      autoSwitchedRef.current = true
+    }
+  }, [activeTab, result?.status, result?.response?.task_id, processingMode])
 
   // Click from preview → switch to matching result tab
   const clickedPdfBlockId = useOcrStore(s => s.clickedPdfBlockId)
   useEffect(() => {
     if (clickedPdfBlockId === null) return
     const block = blocks.find(b => b.id === clickedPdfBlockId)
-    if (block?.formulaId || block?.layoutType?.includes('formula') || block?.latex) setActiveTab('formulas')
-  }, [clickedPdfBlockId, blocks])
+    setActiveTab(tabForPreviewTarget(block, processingMode))
+  }, [clickedPdfBlockId, blocks, processingMode])
 
-  // Scroll result to linked block + highlight pulse
+  // Preview clicks decide the destination tab. Markdown scrolling is handled by MarkdownPreview.
   useEffect(() => {
-    if (!activeLinkId) return
-    const el = document.querySelector(`.result-content [data-block-id="${activeLinkId}"]`)
-    if (!el) return
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    el.classList.add('link-highlight')
-    const t = setTimeout(() => el.classList.remove('link-highlight'), 2600)
-    return () => { clearTimeout(t); el.classList.remove('link-highlight') }
-  }, [activeLinkId])
+    if (!activeLinkId || linkSource !== 'preview') return
+    const block = blocks.find(b => String(b.id) === activeLinkId)
+    setActiveTab(tabForPreviewTarget(block, processingMode))
+  }, [activeLinkId, linkSource, linkEventId, blocks, processingMode])
 
   const handleDownload = () => {
     if (!result?.response?.full_markdown) return
@@ -88,12 +114,6 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${fileName || 'result'}.md`; a.click()
     toast.success('Download started')
   }
-
-  const response = result?.response; const status = result?.status; const errorMessage = result?.error_message
-  const metadata = response?.metadata
-  const totalPages = metadata?.total_pages ?? layout.reduce((max: number, b: any) => Math.max(max, b.page_index ?? 1), 0)
-  const execSec = response?.execution_time ?? response?.result?.execution_time
-  const processingMode = response?.processing_mode || metadata?.processing_mode || 'pipeline'
 
   if (!status) {
     return (
@@ -143,10 +163,10 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
       </div>
 
       {/* Tab bar */}
-      <div className='tab-bar'>
-        <button className='tab-bar-btn' aria-selected={activeTab === 'markdown'} onClick={() => setActiveTab('markdown')}>Markdown</button>
-        <button className='tab-bar-btn' aria-selected={activeTab === 'json'} onClick={() => setActiveTab('json')}>JSON</button>
-        <button className='tab-bar-btn' aria-selected={activeTab === 'formulas'} onClick={() => setActiveTab('formulas')}>Formulas</button>
+      <div className='tab-bar' role='tablist' aria-label='Result views'>
+        <button className='tab-bar-btn' role='tab' aria-selected={activeTab === 'markdown'} onClick={() => setActiveTab('markdown')}>Markdown</button>
+        <button className='tab-bar-btn' role='tab' aria-selected={activeTab === 'json'} onClick={() => setActiveTab('json')}>JSON</button>
+        <button className='tab-bar-btn' role='tab' aria-selected={activeTab === 'formulas'} onClick={() => setActiveTab('formulas')}>Formulas</button>
       </div>
 
       {/* Content */}

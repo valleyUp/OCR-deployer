@@ -5,6 +5,7 @@ import { OCRResults } from './OCRResults'
 import { AppHeader } from '@/components/app/AppHeader'
 import { HistoryPanel } from '@/components/app/HistoryPanel'
 import { ResizableDivider } from '@/components/app/ResizableDivider'
+import { LinkBridge } from '@/components/link/LinkBridge'
 import { useHistoryStore } from '@/store/useHistoryStore'
 import { useConfigStore } from '@/store/useConfigStore'
 import type { HistoryRecord } from '@/libs/historyDb'
@@ -100,6 +101,7 @@ export function OCRPage() {
         <section className='inspector' style={{ width: resultsWidth, minWidth: resultsWidth, flexShrink: 0 }}>
           <OCRResults result={parsedResult} fileName={uploadFile?.name} />
         </section>
+        <LinkBridge />
       </main>
     </div>
   )

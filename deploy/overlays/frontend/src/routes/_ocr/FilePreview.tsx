@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { ArrowRight, FileText, LocateFixed, Maximize2, Minus, Plus, RotateCw } from 'lucide-react'
 import type { TaskResponse, UploadedFile } from './FileUpload'
 import { useOcrStore } from '../../store/useOcrStore'
@@ -9,6 +9,7 @@ import { useFileBlockInteraction } from '@/hooks/useFileBlockInteraction'
 import { usePdfScrollToBlock } from '@/hooks/usePdfScrollToBlock'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/libs/utils'
+import { useLinkState } from '@/hooks/useLinkState'
 
 interface FilePreviewProps { file: UploadedFile | null; result: TaskResponse | null }
 
@@ -22,8 +23,12 @@ export function FilePreview({ file, result }: FilePreviewProps) {
   const clickedBlockId = useOcrStore(s => s.clickedBlockId)
   const setHoveredBlockId = useOcrStore(s => s.setHoveredBlockId)
   const setClickedPdfBlockId = useOcrStore(s => s.setClickedPdfBlockId)
+  const clickedPdfBlockId = useOcrStore(s => s.clickedPdfBlockId)
   const blocks = useOcrStore(s => s.blocks)
   const activeLinkId = useLinkStore(s => s.activeBlockId)
+  const linkSource = useLinkStore(s => s.source)
+  const linkEventId = useLinkStore(s => s.eventId)
+  const { triggerLink } = useLinkState()
   const [_showCopy, setShowCopy] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
@@ -35,9 +40,11 @@ export function FilePreview({ file, result }: FilePreviewProps) {
   const ph = result?.response?.metadata?.height ?? 2339
   const isValid = useMemo(() => !isNaN(pw) && !isNaN(ph) && result?.status === 'completed', [pw, ph, result?.status])
 
-  const hoveredBlock = hoveredBlockId ? blocks.find(b => b.id === hoveredBlockId) : null
-  const clickedBlock = clickedBlockId ? blocks.find(b => b.id === clickedBlockId) : null
-  const activeBlock = clickedBlock || hoveredBlock || null
+  const hoveredBlock = hoveredBlockId !== null ? blocks.find(b => b.id === hoveredBlockId) : null
+  const clickedBlock = clickedBlockId !== null ? blocks.find(b => b.id === clickedBlockId) : null
+  const clickedPdfBlock = clickedPdfBlockId !== null ? blocks.find(b => b.id === clickedPdfBlockId) : null
+  const linkedBlock = activeLinkId ? blocks.find(b => String(b.id) === activeLinkId) : null
+  const activeBlock = clickedBlock || clickedPdfBlock || linkedBlock || hoveredBlock || null
 
   const [_imageScale, setImageScale] = useState({ x: 1, y: 1, offsetX: 0, offsetY: 0 })
 
@@ -54,7 +61,11 @@ export function FilePreview({ file, result }: FilePreviewProps) {
   }, [pdfUrl, isPdf, zoom, rotation])
 
   const pdfPageMetrics = usePdfPageMetrics(viewerRef as RefObject<HTMLDivElement>, pdfUrl, isPdf ? 'application/pdf' : file?.type, isValid, activeBlock, pw, ph)
-  const { handlePdfClick, handlePdfMouseMove, handlePdfMouseLeave, handleImageClick, handleImageMouseMove, handleImageMouseLeave } = useFileBlockInteraction({ blocks, resultStatus: result?.status, setHoveredBlockId, setClickedBlockId: setClickedPdfBlockId, setShowCopyButton: setShowCopy })
+  const setPreviewClickedBlockId = useCallback((blockId: number | null) => {
+    setClickedPdfBlockId(blockId)
+    if (blockId !== null) triggerLink(String(blockId), 'preview')
+  }, [setClickedPdfBlockId, triggerLink])
+  const { handlePdfClick, handlePdfMouseMove, handlePdfMouseLeave, handleImageClick, handleImageMouseMove, handleImageMouseLeave } = useFileBlockInteraction({ blocks, resultStatus: result?.status, setHoveredBlockId, setClickedBlockId: setPreviewClickedBlockId, setShowCopyButton: setShowCopy })
   usePdfScrollToBlock(clickedBlockId, clickedBlock ?? null, viewerRef as RefObject<HTMLDivElement>, pw, ph, result?.status)
 
   useEffect(() => { if (!hoveredBlockId && !clickedBlockId) setShowCopy(false) }, [hoveredBlockId, clickedBlockId])
@@ -65,14 +76,14 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 
   // Link state: scroll preview to linked block + highlight pulse
   useEffect(() => {
-    if (!activeLinkId || !viewerRef.current) return
+    if (!activeLinkId || linkSource !== 'result' || !viewerRef.current) return
     const el = viewerRef.current.querySelector(`[data-block-id="${activeLinkId}"]`)
     if (!el) return
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     el.classList.add('active')
     const t = setTimeout(() => el.classList.remove('active'), 2600)
     return () => { clearTimeout(t); el.classList.remove('active') }
-  }, [activeLinkId])
+  }, [activeLinkId, linkSource, linkEventId])
 
   const renderOverlay = (pageNumber: number) => {
     if (!activeBlock?.bbox) return null

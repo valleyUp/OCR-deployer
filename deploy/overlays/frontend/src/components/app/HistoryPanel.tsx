@@ -77,11 +77,11 @@ export function HistoryPanel({ currentLocalId, onSelect }: HistoryPanelProps) {
           <button className='p-0.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-error)]' onClick={() => setConfirmClear(true)} aria-label='Clear all'><Trash2 size={14} /></button>
         )}
       </div>
-      <div className='relative mx-3 mb-2 flex-shrink-0'>
-        <Search size={12} className='absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none' />
+      <div className='history-search-wrap'>
+        <Search size={12} className='history-search-icon' />
         <input type='text' value={query} onChange={e => setQuery(e.target.value)} placeholder='Search...'
-          className='history-search pl-7 pr-7 w-full' />
-        {query && <button onClick={() => setQuery('')} className='absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'><X size={12} /></button>}
+          className='history-search' />
+        {query && <button onClick={() => setQuery('')} className='history-search-clear'><X size={12} /></button>}
       </div>
       <div className='history-list group'>
         {filtered.length === 0 ? (

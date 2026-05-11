@@ -234,15 +234,31 @@ svg { display: block; width: 16px; height: 16px; }
   font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.05em; color: var(--color-text-muted);
 }
+.history-search-wrap {
+  position: relative;
+  flex-shrink: 0;
+  margin: 0 12px 8px;
+}
 .history-search {
-  height: 30px; margin: 0 12px 8px; padding: 0 10px;
+  width: 100%; height: 30px; margin: 0; padding: 0 28px;
   background: var(--color-bg-subtle); border: 1px solid var(--color-border);
   border-radius: var(--r-sm); font-size: 12px; color: var(--color-text-primary);
-  outline: none; transition: border-color 150ms ease;
-  flex-shrink: 0;
+  outline: none; transition: border-color 150ms ease, background-color 150ms ease;
+  display: block;
 }
 .history-search::placeholder { color: var(--color-text-muted); }
-.history-search:focus { border-color: var(--color-accent); }
+.history-search:focus { border-color: var(--color-accent); background: var(--color-bg-elevated); }
+.history-search-icon {
+  position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  color: var(--color-text-muted); pointer-events: none; z-index: 1;
+}
+.history-search-clear {
+  position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 18px; border-radius: var(--r-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-text-muted);
+}
+.history-search-clear:hover { color: var(--color-text-primary); background: var(--color-bg-subtle); }
 .history-list { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
 
 /* Task card */
@@ -314,7 +330,7 @@ svg { display: block; width: 16px; height: 16px; }
 /* Block overlay (hot zone on preview) */
 .block-hotzone {
   position: absolute; cursor: pointer; border-radius: 2px;
-  transition: background-color 120ms ease, box-shadow 120ms ease;
+  transition: background-color 160ms ease, box-shadow 160ms ease, outline-color 160ms ease;
 }
 .block-hotzone:hover {
   background: rgba(28,27,25,0.04);
@@ -324,8 +340,10 @@ svg { display: block; width: 16px; height: 16px; }
 .block-hotzone[data-active="true"],
 .block-hotzone.active {
   background: var(--color-link-highlight-preview);
-  box-shadow: inset 3px 0 0 0 var(--color-link-border-active);
-  animation: block-pulse 600ms ease-out;
+  outline: 1px solid rgba(74,111,165,0.35);
+  outline-offset: -1px;
+  box-shadow: inset 3px 0 0 0 var(--color-link-border-active), 0 0 0 1px rgba(74,111,165,0.08);
+  animation: block-pulse 720ms ease-out;
 }
 .block-hotzone-icon {
   position: absolute; top: 4px; right: 4px;
@@ -454,15 +472,22 @@ svg { display: block; width: 16px; height: 16px; }
 .content-block {
   position: relative; border-radius: var(--r-sm);
   padding: 8px;
-  transition: background-color 150ms ease;
+  margin: 8px 0;
+  transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms var(--ease-out);
   cursor: pointer;
 }
 .content-block:hover { background: var(--color-bg-subtle); }
-.content-block.highlight {
+.content-block.is-active,
+.content-block.highlight,
+.content-block.link-highlight {
   background: var(--color-link-highlight-result) !important;
-  box-shadow: inset 3px 0 0 0 var(--color-link-border-active);
-  animation: block-pulse 600ms ease-out;
+  box-shadow: inset 3px 0 0 0 var(--color-link-border-active), 0 1px 0 rgba(74,111,165,0.08);
 }
+.content-block.link-highlight {
+  animation: block-pulse 720ms ease-out;
+}
+.content-block-placeholder { cursor: default; background: rgba(255,255,255,0.38); }
+.content-block-image { cursor: default; }
 
 /* Formula cards in result */
 .formula-card {
@@ -470,9 +495,16 @@ svg { display: block; width: 16px; height: 16px; }
   border: 1px solid var(--color-border);
   border-radius: var(--r-md);
   padding: 12px 16px;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 .formula-card:hover { border-color: var(--color-border-strong); box-shadow: var(--shadow-xs); }
+.formula-card.active,
+.formula-card.link-highlight {
+  border-color: rgba(74,111,165,0.45);
+  background: linear-gradient(180deg, #fff 0%, var(--color-link-highlight-result) 100%);
+  box-shadow: inset 3px 0 0 0 var(--color-link-border-active), var(--shadow-sm);
+  animation: block-pulse 720ms ease-out;
+}
 .formula-card-header {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 10px;
@@ -545,8 +577,23 @@ svg { display: block; width: 16px; height: 16px; }
 }
 .result-content [data-block-id].link-highlight {
   background: var(--color-link-highlight-result) !important;
-  box-shadow: inset 3px 0 0 0 var(--color-link-border-active);
-  animation: block-pulse 600ms ease-out;
+  box-shadow: inset 3px 0 0 0 var(--color-link-border-active), 0 1px 0 rgba(74,111,165,0.08);
+  animation: block-pulse 720ms ease-out;
+}
+
+.link-bridge-svg {
+  position: fixed; inset: 0; width: 100vw; height: 100vh;
+  z-index: 40; pointer-events: none; overflow: visible;
+}
+.link-bridge-path {
+  fill: none; stroke: rgba(74,111,165,0.48); stroke-width: 1.5;
+  stroke-linecap: round; stroke-dasharray: 4 7;
+  animation: link-bridge-draw 650ms var(--ease-out) both;
+}
+@keyframes link-bridge-draw {
+  0% { opacity: 0; stroke-dashoffset: 18; }
+  20% { opacity: 1; }
+  100% { opacity: 0; stroke-dashoffset: 0; }
 }
 
 /* Utility */

@@ -10,18 +10,31 @@ import { useCallback, useEffect, useRef } from 'react'
 import { create } from 'zustand'
 
 export type LinkSource = 'preview' | 'result'
+const DEFAULT_DURATION_MS = 2200
 
 interface LinkState {
   activeBlockId: string | null
   source: LinkSource | null
-  activate: (blockId: string, source: LinkSource) => void
+  eventId: number
+  createdAt: number
+  durationMs: number
+  activate: (blockId: string, source: LinkSource, durationMs?: number) => void
   deactivate: () => void
 }
 
 export const useLinkStore = create<LinkState>((set) => ({
   activeBlockId: null,
   source: null,
-  activate: (blockId, source) => set({ activeBlockId: blockId, source }),
+  eventId: 0,
+  createdAt: 0,
+  durationMs: DEFAULT_DURATION_MS,
+  activate: (blockId, source, durationMs = DEFAULT_DURATION_MS) => set(state => ({
+    activeBlockId: blockId,
+    source,
+    eventId: state.eventId + 1,
+    createdAt: Date.now(),
+    durationMs
+  })),
   deactivate: () => set({ activeBlockId: null, source: null })
 }))
 
@@ -37,19 +50,23 @@ export function useLinkState(
 ) {
   const activeBlockId = useLinkStore(s => s.activeBlockId)
   const source = useLinkStore(s => s.source)
+  const eventId = useLinkStore(s => s.eventId)
+  const durationMs = useLinkStore(s => s.durationMs)
   const activate = useLinkStore(s => s.activate)
   const deactivate = useLinkStore(s => s.deactivate)
 
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Auto-clear highlight after 2000ms
+  // Auto-clear highlight after the current navigation event duration.
   useEffect(() => {
     if (activeBlockId) {
-      clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => deactivate(), 2000)
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => deactivate(), durationMs)
     }
-    return () => clearTimeout(timerRef.current)
-  }, [activeBlockId, deactivate])
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [activeBlockId, deactivate, durationMs, eventId])
 
   const triggerLink = useCallback((blockId: string, src: LinkSource) => {
     activate(blockId, src)
@@ -68,5 +85,5 @@ export function useLinkState(
     activeBlockId === blockId
   , [activeBlockId])
 
-  return { activeBlockId, source, triggerLink, clearLink, isActive }
+  return { activeBlockId, source, eventId, triggerLink, clearLink, isActive }
 }

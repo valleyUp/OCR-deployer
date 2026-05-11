@@ -1,11 +1,11 @@
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, FileArchive, Loader2, Sigma } from 'lucide-react'
 import { cn } from '@/libs/utils'
 import { exportTaskFormulas, renderFormulaText, type FormulaItem } from '@/libs/api'
-import { useOcrStore } from '@/store/useOcrStore'
-import { useLinkState } from '@/hooks/useLinkState'
+import { type Block, useOcrStore } from '@/store/useOcrStore'
+import { useLinkState, useLinkStore } from '@/hooks/useLinkState'
 import { toast } from 'sonner'
 
 interface FormulaPanelProps { formulas: FormulaItem[]; taskId?: string | number; searchQuery?: string }
@@ -19,11 +19,23 @@ function FormulaPreview({ latex }: { latex: string }) {
   return <div className='formula-card-body' dangerouslySetInnerHTML={{ __html: html }} />
 }
 
+function resolveFormulaBlock(formula: FormulaItem, blocks: Block[]) {
+  const blockId = Number(formula.block_id)
+  return blocks.find(b =>
+    b.formulaId === formula.formula_id ||
+    (!Number.isNaN(blockId) && b.id === blockId)
+  ) ?? null
+}
+
 export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPanelProps) {
+  const listRef = useRef<HTMLDivElement>(null)
   const blocks = useOcrStore(s => s.blocks)
   const setHoveredBlockId = useOcrStore(s => s.setHoveredBlockId)
   const setClickedBlockId = useOcrStore(s => s.setClickedBlockId)
   const { triggerLink, isActive } = useLinkState()
+  const activeLinkId = useLinkStore(s => s.activeBlockId)
+  const linkSource = useLinkStore(s => s.source)
+  const linkEventId = useLinkStore(s => s.eventId)
   const [copyBusy, setCopyBusy] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [exportBusy, setExportBusy] = useState(false)
@@ -35,6 +47,16 @@ export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPane
   }, [searchQuery, formulas])
 
   const keyFor = (f: FormulaItem, i: number) => f.formula_id || `${f.page_index}-${i}`
+
+  useEffect(() => {
+    if (!activeLinkId || linkSource !== 'preview') return
+    const el = listRef.current?.querySelector(`[data-block-id="${activeLinkId}"]`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('link-highlight')
+    const t = setTimeout(() => el.classList.remove('link-highlight'), 2400)
+    return () => { clearTimeout(t); el.classList.remove('link-highlight') }
+  }, [activeLinkId, linkSource, linkEventId])
 
   const copyFormula = useCallback(async (formula: FormulaItem, format: CopyFormat) => {
     const ck = formula.formula_id || ''; const bk = `${ck}|${format}`
@@ -69,7 +91,7 @@ export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPane
   }
 
   return (
-    <div className='flex flex-col gap-2'>
+    <div className='flex flex-col gap-2' ref={listRef}>
       {/* Toolbar */}
       <div className='flex items-center justify-between mb-1'>
         <span className='text-xs text-[var(--color-text-muted)]'>
@@ -86,13 +108,17 @@ export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPane
       ) : (
         filtered.map((formula, i) => {
           const ck = keyFor(formula, i)
-          const bId = String(formula.block_id ?? i)
+          const block = resolveFormulaBlock(formula, blocks)
+          const bId = String(block?.id ?? formula.block_id ?? i)
           const active = isActive(bId)
           return (
             <div key={ck} data-block-id={bId} className={cn('formula-card', active && 'active')}
-              onMouseEnter={() => { const nb = Number(formula.block_id); const block = blocks.find(b => b.formulaId === formula.formula_id || (!isNaN(nb) && b.id === nb)); if (block) setHoveredBlockId(block.id) }}
+              onMouseEnter={() => { if (block) setHoveredBlockId(block.id) }}
               onMouseLeave={() => setHoveredBlockId(null)}
-              onClick={() => { triggerLink(bId, 'result'); const nb = Number(formula.block_id); const block = blocks.find(b => b.formulaId === formula.formula_id || (!isNaN(nb) && b.id === nb)); if (block) setClickedBlockId(block.id) }}>
+              onClick={() => {
+                if (block) setClickedBlockId(block.id)
+                triggerLink(bId, 'result')
+              }}>
               <div className='formula-card-header'>
                 <span className='formula-card-id'>{formula.formula_id}</span>
                 <div className='formula-card-actions'>

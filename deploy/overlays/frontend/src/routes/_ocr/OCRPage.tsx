@@ -127,27 +127,27 @@ export function OCRPage() {
 					</div>
 				</aside>
 
-				{/* Preview */}
-				<FilePreview file={uploadFile} result={parsedResult} />
+				{/* Workspace + ResizableDivider + Inspector */}
+				<div style={{ display: 'flex', minWidth: 0, overflow: 'hidden' }}>
+					<FilePreview file={uploadFile} result={parsedResult} />
 
-				{/* Resizable divider */}
-				<ResizableDivider
-					value={resultsWidth}
-					onChange={setResultsWidth}
-					onCommit={persistResultsWidth}
-					onReset={resetResultsWidth}
-					min={RESULTS_WIDTH_MIN}
-					max={RESULTS_WIDTH_MAX}
-					direction='right'
-					ariaLabel='调整结果区宽度'
-				/>
+					<ResizableDivider
+						value={resultsWidth}
+						onChange={setResultsWidth}
+						onCommit={persistResultsWidth}
+						onReset={resetResultsWidth}
+						min={RESULTS_WIDTH_MIN}
+						max={RESULTS_WIDTH_MAX}
+						direction='right'
+						ariaLabel='调整结果区宽度'
+					/>
 
-				{/* Inspector / Results */}
-				<section
-					className='inspector'
-					style={{ width: `${resultsWidth}px`, minWidth: `${resultsWidth}px` }}>
-					<OCRResults result={parsedResult} fileName={uploadFile?.name} />
-				</section>
+					<section
+						className='inspector'
+						style={{ width: `${resultsWidth}px`, minWidth: `${resultsWidth}px`, flexShrink: 0 }}>
+						<OCRResults result={parsedResult} fileName={uploadFile?.name} />
+					</section>
+				</div>
 			</main>
 		</div>
 	)

@@ -430,6 +430,18 @@ svg {
   overflow: hidden;
 }
 
+.shell {
+  min-height: calc(100vh - 52px);
+  display: grid;
+  grid-template-columns: 304px 1fr;
+  background: var(--bg-base);
+}
+
+.shell > aside,
+.shell > div {
+  min-width: 0;
+}
+
 
 /* ============================================
    TOPBAR / NAVIGATION
@@ -2008,11 +2020,10 @@ kbd {
 
 @media (max-width: 1050px) {
   .shell {
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: 280px 1fr;
   }
 
   .inspector {
-    grid-column: 1 / -1;
     min-height: 520px;
     border-top: 1px solid var(--line-2);
   }

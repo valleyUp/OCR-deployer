@@ -432,68 +432,6 @@ export function FileUpload({
 					onChange={handleFileInput}
 				/>
 
-				{/* Runtime Settings Sliders */}
-				<div className='card settings-card'>
-					<h2>Runtime</h2>
-					<div className='settings-grid'>
-						<label className='slider-row'>
-							<span>Precision</span>
-							<input
-								className='slider-precision'
-								type='range'
-								min='0'
-								max='100'
-								defaultValue='68'
-							/>
-							<output>68%</output>
-						</label>
-						<label className='slider-row'>
-							<span>Priority</span>
-							<input
-								className='slider-data'
-								type='range'
-								min='0'
-								max='5'
-								defaultValue='4'
-							/>
-							<output>P4</output>
-						</label>
-						<label className='slider-row'>
-							<span>Preview</span>
-							<input
-								className='slider-volume'
-								type='range'
-								min='1'
-								max='10'
-								defaultValue='7'
-							/>
-							<output>7/10</output>
-						</label>
-						<label className='slider-row'>
-							<span>Palette</span>
-							<input
-								className='slider-spectrum'
-								type='range'
-								min='0'
-								max='360'
-								defaultValue='248'
-							/>
-							<output>248°</output>
-						</label>
-						<label className='slider-row'>
-							<span>Page</span>
-							<input
-								className='slider-notch'
-								type='range'
-								min='1'
-								max='12'
-								defaultValue='3'
-							/>
-							<output>p3</output>
-						</label>
-					</div>
-				</div>
-
 				{pendingCount > 0 && (
 					<div className='flex items-center justify-between rounded-lg border border-[rgba(37,99,235,0.18)] bg-[rgba(37,99,235,0.06)] px-3 py-2 text-[12px] font-medium text-[#2563EB]'>
 						<span>{pendingCount} 个任务处理中</span>

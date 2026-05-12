@@ -8,6 +8,7 @@ import { ResizableDivider } from '@/components/app/ResizableDivider'
 import { LinkBridge } from '@/components/link/LinkBridge'
 import { useHistoryStore } from '@/store/useHistoryStore'
 import { useConfigStore } from '@/store/useConfigStore'
+import { getTaskStatus, taskFileUrl } from '@/libs/api'
 import type { HistoryRecord } from '@/libs/historyDb'
 import '@/styles-overlay.css'
 
@@ -25,10 +26,13 @@ function readStoredWidth(): number {
   } catch { return RESULTS_WIDTH_DEFAULT }
 }
 
-function recordToUploadedFile(r: HistoryRecord): UploadedFile {
+export function recordToUploadedFile(r: HistoryRecord): UploadedFile {
+  const result = r.result
+  const previewUrl = taskFileUrl(result?.source_file_path)
   return {
-    id: r.localId, name: r.fileName, size: r.fileSize, type: r.fileType || 'application/octet-stream',
+    id: r.localId, name: result?.original_filename || r.fileName, size: r.fileSize, type: r.fileType || 'application/octet-stream',
     file: new File([], r.fileName, { type: r.fileType || 'application/octet-stream' }),
+    previewUrl,
     uploadTime: new Date(r.createdAt), error: r.errorMessage ?? null, processingMode: r.processingMode
   }
 }
@@ -46,21 +50,51 @@ export function OCRPage() {
   const [currentLocalId, setCurrentLocalId] = useState<string | null>(null)
   const [resultsWidth, setResultsWidth] = useState(RESULTS_WIDTH_DEFAULT)
   const liveFilesRef = useRef<Map<string, UploadedFile>>(new Map())
-  const [, setLiveFilesVersion] = useState(0)
+  const [liveFilesVersion, setLiveFilesVersion] = useState(0)
 
   const ensureConfigLoaded = useConfigStore(s => s.ensureLoaded)
   const records = useHistoryStore(s => s.records)
   const hydrate = useHistoryStore(s => s.hydrate)
+  const upsertHistory = useHistoryStore(s => s.upsert)
 
   useEffect(() => { setResultsWidth(readStoredWidth()); void ensureConfigLoaded(); void hydrate() }, [ensureConfigLoaded, hydrate])
 
   const activeRecord = useMemo(() => records.find(r => r.localId === currentLocalId) ?? null, [records, currentLocalId])
 
+  useEffect(() => {
+    if (!activeRecord?.taskId) return
+    if (activeRecord.result?.source_file_path) return
+    if (activeRecord.status !== 'completed' && activeRecord.status !== 'failed') return
+
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const result = await getTaskStatus(activeRecord.taskId!)
+        if (cancelled) return
+        await upsertHistory({
+          localId: activeRecord.localId,
+          taskId: String(activeRecord.taskId),
+          status: result.status === 'completed' ? 'completed' : result.status === 'failed' ? 'failed' : activeRecord.status,
+          currentStage: result.current_stage ?? result.current_step,
+          progress: result.progress,
+          executionTime: result.execution_time,
+          totalPages: result.metadata?.total_pages,
+          errorMessage: result.error_message,
+          result,
+        })
+      } catch (error) {
+        console.error('[history] refresh source file failed:', error)
+      }
+    }
+    void refresh()
+    return () => { cancelled = true }
+  }, [activeRecord, upsertHistory])
+
   const uploadFile: UploadedFile | null = useMemo(() => {
     if (currentLocalId && liveFilesRef.current.has(currentLocalId)) return liveFilesRef.current.get(currentLocalId)!
     if (activeRecord) return recordToUploadedFile(activeRecord)
     return null
-  }, [activeRecord, currentLocalId])
+  }, [activeRecord, currentLocalId, liveFilesVersion])
 
   const parsedResult: TaskResponse | null = useMemo(() => {
     if (activeRecord) return recordToTaskResponse(activeRecord)

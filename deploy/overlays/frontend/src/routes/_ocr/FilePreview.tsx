@@ -36,6 +36,9 @@ export function FilePreview({ file, result }: FilePreviewProps) {
   const lower = file?.name.toLowerCase() ?? ''
   const isPdf = Boolean(file && (file.type === 'application/pdf' || lower.endsWith('.pdf')))
   const isImg = Boolean(file && (file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif)$/i.test(lower)))
+  const previewSource = file?.previewUrl ?? null
+  const fileBlob = file?.file && file.file.size > 0 ? file.file : null
+  const pdfSource = previewSource ?? fileBlob
   const pw = result?.response?.metadata?.width ?? 1654
   const ph = result?.response?.metadata?.height ?? 2339
   const isValid = useMemo(() => !isNaN(pw) && !isNaN(ph) && result?.status === 'completed', [pw, ph, result?.status])
@@ -70,9 +73,10 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 
   useEffect(() => { if (!hoveredBlockId && !clickedBlockId) setShowCopy(false) }, [hoveredBlockId, clickedBlockId])
   useEffect(() => {
-    if (file && (isPdf || isImg)) { const url = URL.createObjectURL(file.file); setPdfUrl(url); setZoom(1); setRotation(0); return () => URL.revokeObjectURL(url) }
+    if (previewSource && (isPdf || isImg)) { setPdfUrl(previewSource); setZoom(1); setRotation(0); return }
+    if (file && file.file.size > 0 && (isPdf || isImg)) { const url = URL.createObjectURL(file.file); setPdfUrl(url); setZoom(1); setRotation(0); return () => URL.revokeObjectURL(url) }
     setPdfUrl(null)
-  }, [file, isPdf, isImg])
+  }, [file, previewSource, isPdf, isImg])
 
   // Link state: scroll preview to linked block + highlight pulse
   useEffect(() => {
@@ -143,9 +147,11 @@ export function FilePreview({ file, result }: FilePreviewProps) {
       <div className='preview-container' ref={viewerRef}>
         <div className='preview-canvas' style={{ position: 'relative', minHeight: isPdf ? 'auto' : 400 }}>
           {imgToolbar}
-          {isPdf ? (
-            <PdfViewer file={file.file} className='h-full' renderPageOverlay={renderOverlay}
+          {isPdf && pdfSource ? (
+            <PdfViewer file={pdfSource} className='h-full' renderPageOverlay={renderOverlay}
               onPageClick={(e, pn) => handlePdfClick(e, pn, pw, ph)} onPageMouseMove={(e, pn) => handlePdfMouseMove(e, pn, pw, ph)} onPageMouseLeave={handlePdfMouseLeave} />
+          ) : isPdf ? (
+            <div className='flex h-full items-center justify-center text-sm text-[var(--color-text-muted)]'>Loading file preview...</div>
           ) : isImg && pdfUrl ? (
             <div className={cn('relative flex cursor-pointer items-center justify-center overflow-auto p-6', zoom > 1 && 'cursor-grab')}
               onClick={handleImageClick} onMouseMove={handleImageMouseMove} onMouseLeave={handleImageMouseLeave}>

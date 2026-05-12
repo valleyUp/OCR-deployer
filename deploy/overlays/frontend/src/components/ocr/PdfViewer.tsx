@@ -15,7 +15,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS_STATIC_BASE}/pdf.worker.min.mjs`;
 
 
 interface PdfViewerProps {
-    file: File | null;
+    file: File | string | null;
     className?: string;
     renderPageOverlay?: (pageNumber: number) => React.ReactNode;
     onPageClick?: (e: React.MouseEvent<HTMLDivElement>, pageNumber: number) => void;

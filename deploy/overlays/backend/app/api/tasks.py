@@ -12,6 +12,8 @@ from mimetypes import guess_type
 
 from app.schemas.response import ApiResponse, TaskData
 from app.core.task_manager import get_task_manager
+from app.db.database import AsyncSessionLocal
+from app.repository.task import TaskRepository
 from app.utils.logger import logger
 from app.utils.upload_file_manager import file_upload_handler
 from app.utils.config import settings
@@ -59,6 +61,21 @@ def _read_task_result(task_info: dict) -> dict:
         return load_result_file(result_path)
     except Exception as exc:
         logger.warning(f"Failed to read result file {result_file_path}: {exc}")
+        return {}
+
+
+async def _get_task_file_info(task_id: str) -> dict:
+    try:
+        async with AsyncSessionLocal() as db:
+            task = await TaskRepository(db).get_by_task_id(task_id)
+            if not task:
+                return {}
+            return {
+                "original_filename": task.original_filename,
+                "source_file_path": task.file_path,
+            }
+    except Exception as exc:
+        logger.warning(f"Failed to read source file info for task {task_id}: {exc}")
         return {}
 
 
@@ -163,7 +180,7 @@ async def read_file(path: str):
     """
     读取指定路径的文件内容
 
-    对于图片文件，直接返回图片数据
+    对于图片或 PDF 文件，直接返回文件数据
     对于其他文件，返回JSON格式的文件信息
 
     - **path**: 文件路径
@@ -194,8 +211,8 @@ async def read_file(path: str):
         with open(file_path, "rb") as f:
             content = f.read()
 
-        # 如果是图片文件，直接返回二进制数据
-        if mime_type.startswith("image/"):
+        # 预览器需要直接加载图片和 PDF 的二进制内容。
+        if mime_type.startswith("image/") or mime_type == "application/pdf":
             return Response(
                 content=content,
                 media_type=mime_type,
@@ -254,6 +271,7 @@ async def get_task_status(task_id: str):
         if started_at and completed_at:
             execution_time = (completed_at - started_at).total_seconds()
 
+        file_info = await _get_task_file_info(task_id)
         response_data = {
             "task_id": task_info.get("task_id"),
             "document_id": task_info.get("document_id"),
@@ -270,6 +288,7 @@ async def get_task_status(task_id: str):
             "priority": task_info.get("priority"),
             "retry_count": task_info.get("retry_count"),
             "worker_id": task_info.get("worker_id"),
+            **file_info,
         }
 
         # 添加结果数据

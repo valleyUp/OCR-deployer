@@ -85,6 +85,8 @@ export interface TaskStatusData {
 	completed_at?: string
 	error_message?: string | null
 	result_file_path?: string
+	original_filename?: string
+	source_file_path?: string
 	result?: {
 		output_path?: string
 		output_files?: string[]
@@ -213,6 +215,11 @@ export async function exportTaskFormulas(
 		responseType: 'blob'
 	})
 	return response.data
+}
+
+export function taskFileUrl(path?: string | null): string | undefined {
+	if (!path) return undefined
+	return `${BASE_URL}/tasks/file?path=${encodeURIComponent(path)}`
 }
 
 /**

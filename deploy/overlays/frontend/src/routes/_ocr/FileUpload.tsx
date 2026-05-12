@@ -13,7 +13,7 @@ export type Layout = {
   block_id: number; text_length?: number | null
 }
 export interface UploadedFile {
-  id: string; name: string; size: number; type: string; file: File
+  id: string; name: string; size: number; type: string; file: File; previewUrl?: string
   uploadTime: Date; error: string | null; processingMode: ProcessingMode
 }
 export interface TaskResponse {

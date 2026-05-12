@@ -57,7 +57,7 @@ export async function renderFormulaUnicodeMath(latex: string): Promise<string> {
 // (same logic as render-formula.cjs but operates on DOM nodes)
 // ---------------------------------------------------------------------------
 
-interface MathMLElement extends Element {
+export interface MathMLElement extends Element {
   childNodes: NodeListOf<ChildNode & MathMLElement>
 }
 

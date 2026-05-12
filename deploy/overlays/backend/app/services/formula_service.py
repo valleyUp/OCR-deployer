@@ -341,14 +341,32 @@ def extract_formulas_from_layout(
         content = block.get("block_content") or block.get("content")
 
         if explicit_latex:
-            formulas.append(
-                build_formula_entry(
-                    task_id=task_id,
-                    block=block,
-                    latex=explicit_latex,
-                    ordinal=len(formulas) + 1,
+            # When a block contains multiple formulas (e.g. two $$...$$ blocks),
+            # the simple normalize_latex call strips only the outermost delimiters,
+            # leaving internal $$ markers that break rendering.  Detect this case
+            # and extract each candidate separately.
+            candidates = extract_latex_candidates(content)
+            if len(candidates) > 1:
+                for latex in candidates:
+                    if not latex:
+                        continue
+                    formulas.append(
+                        build_formula_entry(
+                            task_id=task_id,
+                            block=block,
+                            latex=latex,
+                            ordinal=len(formulas) + 1,
+                        )
+                    )
+            else:
+                formulas.append(
+                    build_formula_entry(
+                        task_id=task_id,
+                        block=block,
+                        latex=explicit_latex,
+                        ordinal=len(formulas) + 1,
+                    )
                 )
-            )
             continue
 
         if not looks_like_formula(layout_type, content):

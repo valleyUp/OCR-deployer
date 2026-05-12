@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, FileArchive, Loader2, Sigma } from 'lucide-react'
 import { cn } from '@/libs/utils'
-import { exportTaskFormulas, renderFormula, renderFormulaText, type FormulaItem } from '@/libs/api'
+import { exportTaskFormulas, type FormulaItem } from '@/libs/api'
+import {
+  renderFormulaSvg,
+  renderFormulaMathML,
+  renderFormulaUnicodeMath,
+  isMathJaxReady,
+} from '@/libs/mathjaxRenderer'
 import { type Block, useOcrStore } from '@/store/useOcrStore'
 import { useLinkState, useLinkStore } from '@/hooks/useLinkState'
 import { toast } from 'sonner'
@@ -12,38 +18,31 @@ type CopyFormat = 'latex' | 'mathml' | 'unicodemath'
 const COPY_MAP: Record<CopyFormat, string> = { latex: 'LaTeX', mathml: 'MathML', unicodemath: 'UMath' }
 const COPY_SUCCESS: Record<CopyFormat, string> = { latex: 'LaTeX copied', mathml: 'MathML copied', unicodemath: 'UMath copied' }
 
+const COPY_RENDERER: Record<CopyFormat, (latex: string) => Promise<string>> = {
+  latex: async (l) => l,
+  mathml: renderFormulaMathML,
+  unicodemath: renderFormulaUnicodeMath,
+}
+
 function FormulaPreview({ latex }: { latex: string }) {
-  const [svgUrl, setSvgUrl] = useState<string | null>(null)
+  const [svg, setSvg] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     let disposed = false
-    let objectUrl: string | null = null
 
-    setSvgUrl(null)
+    setSvg(null)
     setFailed(false)
     setLoading(false)
     if (!latex.trim()) return
 
-    setLoading(true)
-    renderFormula(latex, 'svg')
-      .then(blob => {
-        if (disposed) return
-        objectUrl = URL.createObjectURL(blob)
-        setSvgUrl(objectUrl)
-      })
-      .catch(() => {
-        if (!disposed) setFailed(true)
-      })
-      .finally(() => {
-        if (!disposed) setLoading(false)
-      })
+    if (!isMathJaxReady()) setLoading(true)
+    renderFormulaSvg(latex)
+      .then(s => { if (!disposed) { setSvg(s); setLoading(false) } })
+      .catch(() => { if (!disposed) { setFailed(true); setLoading(false) } })
 
-    return () => {
-      disposed = true
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
+    return () => { disposed = true }
   }, [latex])
 
   return (
@@ -54,7 +53,7 @@ function FormulaPreview({ latex }: { latex: string }) {
           Rendering
         </div>
       )}
-      {!loading && svgUrl && <img className='formula-preview-img' src={svgUrl} alt='Rendered formula' />}
+      {!loading && svg && <div className='formula-preview-img' dangerouslySetInnerHTML={{ __html: svg }} />}
       {!loading && failed && <code className='formula-preview-source'>{latex}</code>}
     </div>
   )
@@ -81,6 +80,13 @@ export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPane
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [exportBusy, setExportBusy] = useState(false)
 
+  // Preload MathJax as soon as formulas data arrives
+  useEffect(() => {
+    if (formulas.length && !isMathJaxReady()) {
+      renderFormulaSvg('x').catch(() => {})
+    }
+  }, [formulas.length])
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return formulas
@@ -103,7 +109,7 @@ export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPane
     const ck = formula.formula_id || ''; const bk = `${ck}|${format}`
     setCopyBusy(bk)
     try {
-      const text = await renderFormulaText(formula.latex, format)
+      const text = await COPY_RENDERER[format](formula.latex)
       await navigator.clipboard.writeText(text)
       toast.success(COPY_SUCCESS[format]); setCopiedKey(bk)
       setTimeout(() => setCopiedKey(p => p === bk ? null : p), 1200)

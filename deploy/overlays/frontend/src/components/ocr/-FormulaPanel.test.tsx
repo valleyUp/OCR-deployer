@@ -6,10 +6,17 @@ import { FormulaPanel } from './FormulaPanel'
 import { useLinkStore } from '@/hooks/useLinkState'
 import { useOcrStore } from '@/store/useOcrStore'
 
+const mockSvg = '<svg><text>formula</text></svg>'
+
 vi.mock('@/libs/api', () => ({
   exportTaskFormulas: vi.fn(),
-  renderFormula: vi.fn(async () => new Blob(['<svg></svg>'], { type: 'image/svg+xml' })),
-  renderFormulaText: vi.fn(),
+}))
+
+vi.mock('@/libs/mathjaxRenderer', () => ({
+  renderFormulaSvg: vi.fn(async (_latex: string) => mockSvg),
+  renderFormulaMathML: vi.fn(async (latex: string) => `<math><mi>${latex}</mi></math>`),
+  renderFormulaUnicodeMath: vi.fn(async (latex: string) => latex),
+  isMathJaxReady: vi.fn(() => true),
 }))
 
 vi.mock('sonner', () => ({
@@ -34,7 +41,7 @@ describe('FormulaPanel', () => {
     useOcrStore.setState({ hoveredBlockId: null, clickedBlockId: null, clickedPdfBlockId: null, blocks: [] })
   })
 
-  it('uses compact UMath copy label and SVG preview rendering', async () => {
+  it('renders formula preview with CDN MathJax SVG and compact copy labels', async () => {
     render(
       <FormulaPanel
         taskId='task-1'
@@ -56,7 +63,7 @@ describe('FormulaPanel', () => {
     expect(screen.queryByText('UnicodeMath')).toBeNull()
 
     await waitFor(() => {
-      expect(screen.getByAltText('Rendered formula')).toBeTruthy()
+      expect(screen.getByText('formula')).toBeTruthy()
     })
   })
 })

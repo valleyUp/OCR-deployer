@@ -515,13 +515,16 @@ svg { display: block; width: 16px; height: 16px; }
 }
 .formula-card-body {
   background: var(--color-bg-subtle); border-radius: var(--r-sm);
-  padding: 14px 16px; font-family: var(--font-mono); font-size: 14px;
+  padding: 16px; font-family: var(--font-mono); font-size: 16px;
   text-align: center; overflow-x: auto;
-  min-height: 76px; display: flex; align-items: center; justify-content: center;
+  min-height: 60px; display: flex; align-items: center; justify-content: center;
 }
 .formula-card-body-fallback { justify-content: flex-start; text-align: left; }
 .formula-preview-img {
-  display: block; max-width: 100%; height: auto; margin: 0 auto;
+  display: block; width: 100%; margin: 0 auto;
+}
+.formula-preview-img svg {
+  display: block; width: 100%; height: auto; min-height: 40px;
 }
 .formula-preview-loading {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;

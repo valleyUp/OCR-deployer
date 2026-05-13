@@ -6,7 +6,6 @@ import {
   renderFormulaSvg,
   renderFormulaMathML,
   renderFormulaUnicodeMath,
-  isMathJaxReady,
 } from '@/libs/mathjaxRenderer'
 import { type Block, useOcrStore } from '@/store/useOcrStore'
 import { useLinkState, useLinkStore } from '@/hooks/useLinkState'
@@ -34,10 +33,9 @@ function FormulaPreview({ latex }: { latex: string }) {
 
     setSvg(null)
     setFailed(false)
-    setLoading(false)
+    setLoading(true)
     if (!latex.trim()) return
 
-    if (!isMathJaxReady()) setLoading(true)
     renderFormulaSvg(latex)
       .then(s => { if (!disposed) { setSvg(s); setLoading(false) } })
       .catch(() => { if (!disposed) { setFailed(true); setLoading(false) } })
@@ -79,13 +77,6 @@ export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPane
   const [copyBusy, setCopyBusy] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [exportBusy, setExportBusy] = useState(false)
-
-  // Preload MathJax as soon as formulas data arrives
-  useEffect(() => {
-    if (formulas.length && !isMathJaxReady()) {
-      renderFormulaSvg('x').catch(() => {})
-    }
-  }, [formulas.length])
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()

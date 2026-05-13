@@ -13,6 +13,8 @@ export interface HistoryRecord {
 	fileName: string
 	fileSize: number
 	fileType: string
+	sourceFilePath?: string | null
+	resultAvailable?: boolean
 	processingMode: 'pipeline' | 'formula'
 	status: HistoryStatus
 	currentStage?: string | null

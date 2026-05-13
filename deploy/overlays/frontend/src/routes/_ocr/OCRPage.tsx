@@ -8,7 +8,7 @@ import { ResizableDivider } from '@/components/app/ResizableDivider'
 import { LinkBridge } from '@/components/link/LinkBridge'
 import { useHistoryStore } from '@/store/useHistoryStore'
 import { useConfigStore } from '@/store/useConfigStore'
-import { getTaskStatus, taskFileUrl } from '@/libs/api'
+import { getTaskStatus, listTasks, taskFileUrl, type TaskListItem } from '@/libs/api'
 import type { HistoryRecord } from '@/libs/historyDb'
 import '@/styles-overlay.css'
 
@@ -26,9 +26,56 @@ function readStoredWidth(): number {
   } catch { return RESULTS_WIDTH_DEFAULT }
 }
 
+function parseTaskTime(value?: string | null): number | undefined {
+  if (!value) return undefined
+  const ms = Date.parse(value)
+  return Number.isFinite(ms) ? ms : undefined
+}
+
+function mimeFromTaskFile(name?: string | null, fileType?: string | null): string {
+  const raw = (fileType || '').trim().toLowerCase()
+  if (raw.includes('/')) return raw
+  const lower = (name || '').toLowerCase()
+  if (raw === 'pdf' || lower.endsWith('.pdf')) return 'application/pdf'
+  if (raw === 'png' || lower.endsWith('.png')) return 'image/png'
+  if (raw === 'jpg' || raw === 'jpeg' || /\.(jpe?g)$/i.test(lower)) return 'image/jpeg'
+  if (raw === 'webp' || lower.endsWith('.webp')) return 'image/webp'
+  return 'application/octet-stream'
+}
+
+function toHistoryStatus(status: TaskListItem['status']): HistoryRecord['status'] {
+  if (status === 'pending' || status === 'processing' || status === 'completed' || status === 'cancelled') return status
+  return 'failed'
+}
+
+function serverTaskToRecord(task: TaskListItem): HistoryRecord {
+  const taskId = String(task.task_id)
+  const fileName = task.original_filename || `task-${taskId}`
+  return {
+    localId: `task:${taskId}`,
+    taskId,
+    fileName,
+    fileSize: task.file_size ?? 0,
+    fileType: mimeFromTaskFile(fileName, task.file_type),
+    sourceFilePath: task.source_file_path,
+    resultAvailable: task.result_available,
+    processingMode: task.processing_mode === 'formula' ? 'formula' : 'pipeline',
+    status: toHistoryStatus(task.status),
+    currentStage: task.current_stage ?? task.current_step,
+    progress: task.progress,
+    createdAt: parseTaskTime(task.created_at) ?? Date.now(),
+    startedAt: parseTaskTime(task.started_at),
+    completedAt: parseTaskTime(task.completed_at),
+    executionTime: task.execution_time ?? undefined,
+    totalPages: task.total_pages ?? undefined,
+    errorMessage: task.error_message,
+    resultStripped: Boolean(task.result_available),
+  }
+}
+
 export function recordToUploadedFile(r: HistoryRecord): UploadedFile {
   const result = r.result
-  const previewUrl = taskFileUrl(result?.source_file_path)
+  const previewUrl = taskFileUrl(result?.source_file_path || r.sourceFilePath)
   return {
     id: r.localId, name: result?.original_filename || r.fileName, size: r.fileSize, type: r.fileType || 'application/octet-stream',
     file: new File([], r.fileName, { type: r.fileType || 'application/octet-stream' }),
@@ -50,14 +97,34 @@ export function OCRPage() {
   const [currentLocalId, setCurrentLocalId] = useState<string | null>(null)
   const [resultsWidth, setResultsWidth] = useState(RESULTS_WIDTH_DEFAULT)
   const liveFilesRef = useRef<Map<string, UploadedFile>>(new Map())
+  const serverHistoryLoadedRef = useRef(false)
   const [liveFilesVersion, setLiveFilesVersion] = useState(0)
 
   const ensureConfigLoaded = useConfigStore(s => s.ensureLoaded)
   const records = useHistoryStore(s => s.records)
+  const hydrated = useHistoryStore(s => s.hydrated)
   const hydrate = useHistoryStore(s => s.hydrate)
   const upsertHistory = useHistoryStore(s => s.upsert)
+  const mergeServerRecords = useHistoryStore(s => s.mergeServerRecords)
 
   useEffect(() => { setResultsWidth(readStoredWidth()); void ensureConfigLoaded(); void hydrate() }, [ensureConfigLoaded, hydrate])
+
+  useEffect(() => {
+    if (!hydrated || serverHistoryLoadedRef.current) return
+    serverHistoryLoadedRef.current = true
+    let cancelled = false
+    const sync = async () => {
+      try {
+        const data = await listTasks({ limit: 100 })
+        if (cancelled) return
+        await mergeServerRecords(data.tasks.map(serverTaskToRecord))
+      } catch (error) {
+        console.error('[history] server sync failed:', error)
+      }
+    }
+    void sync()
+    return () => { cancelled = true }
+  }, [hydrated, mergeServerRecords])
 
   const activeRecord = useMemo(() => records.find(r => r.localId === currentLocalId) ?? null, [records, currentLocalId])
 
@@ -80,6 +147,8 @@ export function OCRPage() {
           executionTime: result.execution_time,
           totalPages: result.metadata?.total_pages,
           errorMessage: result.error_message,
+          sourceFilePath: result.source_file_path,
+          resultAvailable: true,
           result,
         })
       } catch (error) {

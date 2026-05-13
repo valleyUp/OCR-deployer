@@ -68,7 +68,7 @@ export interface UploadTaskParams {
 	processing_mode?: 'pipeline' | 'formula'
 }
 
-export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed'
+export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'dead_letter'
 
 // 轮询接口返回的 data 结构
 export interface TaskStatusData {
@@ -148,6 +148,47 @@ export interface TaskFormulasData {
 }
 
 export interface TaskStatusResponse extends ApiResponse<TaskStatusData> {}
+
+export interface TaskListItem {
+	task_id: string | number
+	document_id?: string
+	status: TaskStatus
+	processing_mode?: 'pipeline' | 'formula' | string
+	progress?: number | null
+	current_stage?: string | null
+	current_step?: string | null
+	execution_time?: number | null
+	created_at?: string | null
+	started_at?: string | null
+	completed_at?: string | null
+	error_message?: string | null
+	priority?: number | null
+	retry_count?: number | null
+	original_filename?: string | null
+	file_size?: number | null
+	file_type?: string | null
+	source_file_path?: string | null
+	result_file_path?: string | null
+	result_available?: boolean
+	total_pages?: number | null
+}
+
+export interface TasksListData {
+	tasks: TaskListItem[]
+	total: number
+	limit: number
+	offset: number
+}
+
+export async function listTasks(params: { status?: string; limit?: number; offset?: number } = {}): Promise<TasksListData> {
+	const response = await api.get<ApiResponse<TasksListData>>('/tasks/', { params })
+
+	if (!response.data.success) {
+		throw new Error(response.data.message || '查询任务列表失败')
+	}
+
+	return response.data.data
+}
 
 /**
  * 上传文件并创建 OCR 任务

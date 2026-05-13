@@ -246,7 +246,7 @@ GET  /api/v1/tasks/{task_id}/formulas/export?formats=latex,mathml,unicodemath,pn
 
 - PDF.js worker、cmaps、standard fonts 在 frontend 镜像构建阶段复制到 `public/pdfjs`，运行期由 nginx 的 `/pdfjs/` 本地路径提供。
 - WebUI 的 API 请求走同源 `/api/`，由 nginx 代理到 `backend:8000`。
-- 公式渲染在 backend 容器内完成：MathML/UnicodeMath 使用固定在 `deploy/overlays/backend/formula-renderer/package-lock.json` 的 `mathjax-full@3.2.2`，SVG/PNG 使用容器内精选 TeX Live 数学包渲染。
+- 公式渲染在 backend 容器内完成：MathML/UnicodeMath 使用固定在 `deploy/overlays/backend/formula-renderer/package-lock.json` 的 `mathjax-full@3.2.2`，SVG/PNG 使用容器内精选 TeX Live 数学包渲染；前端公式预览和复制不再动态加载公网 MathJax。
 
 构建期仍需要可访问的 apt、PyPI、npm、镜像仓库或内部镜像源。相关入口：
 
@@ -319,8 +319,12 @@ podman compose --env-file deploy/.env.example -f deploy/docker-compose.yml confi
 
 ```text
 deploy/overlays/backend/tests/test_formula_service.py
-deploy/overlays/frontend/src/routes/_ocr/-FileUpload.test.tsx
+deploy/overlays/backend/tests/test_task_file_service.py
+deploy/overlays/backend/tests/test_task_history_service.py
 deploy/overlays/frontend/src/routes/_ocr/-OCRResults.test.tsx
+deploy/overlays/frontend/src/components/ocr/-FormulaPanel.test.tsx
+deploy/overlays/frontend/src/libs/-api.test.ts
+deploy/overlays/frontend/src/libs/-mathjaxRenderer.test.ts
 ```
 
 ## Patch Queue 兼容流程

@@ -23,6 +23,11 @@ from app.services.formula_service import (
     load_result_file,
     parse_formula_formats,
 )
+from app.services.task_file_service import (
+    TaskFileAccessError,
+    resolve_task_file_path,
+)
+from app.services.task_history_service import task_to_history_summary
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -186,17 +191,19 @@ async def read_file(path: str):
     - **path**: 文件路径
     """
     try:
-        file_path = Path(path)
-
-        # 检查文件是否存在
-        if not file_path.exists():
+        try:
+            file_path = resolve_task_file_path(path, settings.OUTPUT_DIR)
+        except TaskFileAccessError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"File path is outside task data directory: {path}",
+            )
+        except FileNotFoundError:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"File not found: {path}",
             )
-
-        # 检查是否为文件
-        if not file_path.is_file():
+        except IsADirectoryError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Path is not a file: {path}",
@@ -440,13 +447,18 @@ async def list_tasks(status: Optional[str] = None, limit: int = 100, offset: int
     - **offset**: 偏移量
     """
     try:
-        task_manager = get_task_manager()
-        tasks = await task_manager.list_tasks(status=status, limit=limit, offset=offset)
+        async with AsyncSessionLocal() as db:
+            task_repo = TaskRepository(db)
+            tasks = await task_repo.list_tasks_by_status(
+                status=status,
+                skip=offset,
+                limit=limit,
+            )
 
         return ApiResponse(
             success=True,
             data={
-                "tasks": tasks,
+                "tasks": [task_to_history_summary(task) for task in tasks],
                 "total": len(tasks),
                 "limit": limit,
                 "offset": offset,

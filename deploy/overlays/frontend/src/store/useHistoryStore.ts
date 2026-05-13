@@ -14,6 +14,7 @@ interface HistoryState {
 	hydrated: boolean
 	hydrate: () => Promise<void>
 	upsert: (patch: Partial<HistoryRecord> & { localId: string }) => Promise<void>
+	mergeServerRecords: (records: HistoryRecord[]) => Promise<void>
 	remove: (localId: string) => Promise<void>
 	clear: () => Promise<void>
 	loadResult: (localId: string) => Promise<HistoryRecord | undefined>
@@ -67,6 +68,51 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 			const rest = state.records.filter(r => r.localId !== next.localId)
 			return { records: [next, ...rest] }
 		})
+	},
+
+	mergeServerRecords: async incoming => {
+		if (!incoming.length) return
+
+		const existingRecords = get().records
+		const byTaskId = new Map(
+			existingRecords
+				.filter(record => record.taskId !== undefined && record.taskId !== null)
+				.map(record => [String(record.taskId), record])
+		)
+		const mergedByLocalId = new Map(existingRecords.map(record => [record.localId, record]))
+
+		for (const record of incoming) {
+			const existing = record.taskId !== undefined && record.taskId !== null
+				? byTaskId.get(String(record.taskId))
+				: undefined
+			const localId = existing?.localId ?? record.localId
+			const preservedResult = record.result === undefined ? existing?.result : record.result
+			const next = mergeRecord(existing ?? mergedByLocalId.get(localId), {
+				...record,
+				localId,
+				result: preservedResult,
+				resultStripped: preservedResult
+					? existing?.resultStripped
+					: record.resultStripped ?? existing?.resultStripped,
+			})
+			mergedByLocalId.set(localId, next)
+			if (next.taskId !== undefined && next.taskId !== null) {
+				byTaskId.set(String(next.taskId), next)
+			}
+			try {
+				await putRecord(next)
+			} catch (error) {
+				console.error('[history] merge server record failed:', error)
+			}
+		}
+
+		try {
+			await pruneToQuota()
+		} catch (error) {
+			console.error('[history] prune after server merge failed:', error)
+		}
+
+		set({ records: [...mergedByLocalId.values()].sort((a, b) => b.createdAt - a.createdAt) })
 	},
 
 	remove: async localId => {

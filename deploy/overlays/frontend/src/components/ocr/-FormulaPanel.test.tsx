@@ -16,7 +16,6 @@ vi.mock('@/libs/mathjaxRenderer', () => ({
   renderFormulaSvg: vi.fn(async (_latex: string) => mockSvg),
   renderFormulaMathML: vi.fn(async (latex: string) => `<math><mi>${latex}</mi></math>`),
   renderFormulaUnicodeMath: vi.fn(async (latex: string) => latex),
-  isMathJaxReady: vi.fn(() => true),
 }))
 
 vi.mock('sonner', () => ({
@@ -41,7 +40,7 @@ describe('FormulaPanel', () => {
     useOcrStore.setState({ hoveredBlockId: null, clickedBlockId: null, clickedPdfBlockId: null, blocks: [] })
   })
 
-  it('renders formula preview with CDN MathJax SVG and compact copy labels', async () => {
+  it('renders formula preview with backend SVG rendering and compact copy labels', async () => {
     render(
       <FormulaPanel
         taskId='task-1'

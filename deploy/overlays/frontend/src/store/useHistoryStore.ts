@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import {
+	addDeletedTaskIds,
 	clearAll,
 	deleteRecord,
+	getDeletedTaskIds,
 	getRecord,
 	listRecords,
 	pruneToQuota,
@@ -73,6 +75,13 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 	mergeServerRecords: async incoming => {
 		if (!incoming.length) return
 
+		// Skip records whose taskId was explicitly deleted by the user
+		const deletedIds = getDeletedTaskIds()
+		const filtered = deletedIds.size
+			? incoming.filter(r => !(r.taskId !== undefined && r.taskId !== null && deletedIds.has(String(r.taskId))))
+			: incoming
+		if (!filtered.length) return
+
 		const existingRecords = get().records
 		const byTaskId = new Map(
 			existingRecords
@@ -81,7 +90,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 		)
 		const mergedByLocalId = new Map(existingRecords.map(record => [record.localId, record]))
 
-		for (const record of incoming) {
+		for (const record of filtered) {
 			const existing = record.taskId !== undefined && record.taskId !== null
 				? byTaskId.get(String(record.taskId))
 				: undefined
@@ -116,6 +125,11 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 	},
 
 	remove: async localId => {
+		// Remember the server taskId so mergeServerRecords won't revive it
+		const record = get().records.find(r => r.localId === localId)
+		if (record?.taskId !== undefined && record?.taskId !== null) {
+			addDeletedTaskIds([record.taskId])
+		}
 		try {
 			await deleteRecord(localId)
 		} catch (error) {
@@ -127,6 +141,11 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 	},
 
 	clear: async () => {
+		// Mark all server-originated records as deleted before wiping
+		const taskIds = get().records
+			.filter(r => r.taskId !== undefined && r.taskId !== null)
+			.map(r => r.taskId!)
+		if (taskIds.length) addDeletedTaskIds(taskIds)
 		try {
 			await clearAll()
 		} catch (error) {

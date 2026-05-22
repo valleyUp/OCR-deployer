@@ -154,3 +154,35 @@ export async function pruneToQuota(): Promise<void> {
 }
 
 export const HISTORY_SIZE_LIMIT = STORE_SIZE_LIMIT
+
+// ── Deleted-task-ID tracking ──
+// Persists IDs of server tasks the user explicitly deleted so that
+// mergeServerRecords() won't resurrect them on the next page load.
+const DELETED_TASK_IDS_KEY = 'ocr:deletedTaskIds'
+
+export function getDeletedTaskIds(): Set<string> {
+	try {
+		const raw = localStorage.getItem(DELETED_TASK_IDS_KEY)
+		if (!raw) return new Set()
+		const parsed = JSON.parse(raw)
+		return new Set(Array.isArray(parsed) ? parsed.map(String) : [])
+	} catch {
+		return new Set()
+	}
+}
+
+export function addDeletedTaskIds(taskIds: (string | number)[]): void {
+	const existing = getDeletedTaskIds()
+	for (const id of taskIds) {
+		if (id !== undefined && id !== null) existing.add(String(id))
+	}
+	try {
+		localStorage.setItem(DELETED_TASK_IDS_KEY, JSON.stringify([...existing]))
+	} catch { /* ignore quota errors */ }
+}
+
+export function clearDeletedTaskIds(): void {
+	try {
+		localStorage.removeItem(DELETED_TASK_IDS_KEY)
+	} catch { /* ignore */ }
+}

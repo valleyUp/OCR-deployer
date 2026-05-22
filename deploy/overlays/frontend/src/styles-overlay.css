@@ -521,10 +521,10 @@ svg { display: block; width: 16px; height: 16px; }
 }
 .formula-card-body-fallback { justify-content: flex-start; text-align: left; }
 .formula-preview-img {
-  display: block; width: 100%; margin: 0 auto;
+  display: block;
 }
 .formula-preview-img svg {
-  display: block; width: 100%; height: auto; min-height: 40px;
+  display: block; width: auto; height: auto;
 }
 .formula-preview-loading {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;

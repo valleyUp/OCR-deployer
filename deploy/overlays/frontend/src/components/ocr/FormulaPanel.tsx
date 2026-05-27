@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, FileArchive, Loader2, Sigma } from 'lucide-react'
-import { cn } from '@/libs/utils'
+import { cn, copyToClipboard } from '@/libs/utils'
 import { exportTaskFormulas, type FormulaItem } from '@/libs/api'
 import {
   renderFormulaSvg,
@@ -101,7 +101,8 @@ export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPane
     setCopyBusy(bk)
     try {
       const text = await COPY_RENDERER[format](formula.latex)
-      await navigator.clipboard.writeText(text)
+      const copied = await copyToClipboard(text)
+      if (!copied) throw new Error('clipboard is unavailable')
       toast.success(COPY_SUCCESS[format]); setCopiedKey(bk)
       setTimeout(() => setCopiedKey(p => p === bk ? null : p), 1200)
     } catch (e: any) { toast.error(`Copy failed: ${e.message}`) }

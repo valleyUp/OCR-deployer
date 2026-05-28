@@ -13,6 +13,7 @@ from app.api.tasks import router as tasks_router
 from app.api.formulas import router as formulas_router
 from app.api.system import router as system_router
 from app.api.config import router as config_router
+from app.api.session import router as session_router
 from app.core.task_manager import init_task_system, shutdown_task_system
 from app.db.database import init_db, close_db
 from app.utils.logger import logger
@@ -69,6 +70,7 @@ app.include_router(tasks_router, prefix="/api/v1")
 app.include_router(formulas_router, prefix="/api/v1")
 app.include_router(system_router, prefix="/api/v1")
 app.include_router(config_router, prefix="/api/v1")
+app.include_router(session_router, prefix="/api/v1")
 
 
 @app.get("/")

@@ -7,16 +7,19 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime, UTC
 
-from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, Response
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Response
 from mimetypes import guess_type
+from sqlalchemy import select
 
 from app.schemas.response import ApiResponse, TaskData
 from app.core.task_manager import get_task_manager
 from app.db.database import AsyncSessionLocal
-from app.repository.task import TaskRepository
+from app.models.task import Task, TaskStatus
 from app.utils.logger import logger
 from app.utils.upload_file_manager import file_upload_handler
 from app.utils.config import settings
+from app.services.owner_service import OwnerSession, attach_owner_cookie, get_owner_session
+from app.services.task_cleanup_service import delete_task_files
 from app.services.formula_service import (
     build_formulas_zip,
     extract_formulas_from_layout,
@@ -26,6 +29,7 @@ from app.services.formula_service import (
 from app.services.task_file_service import (
     TaskFileAccessError,
     resolve_task_file_path,
+    task_id_from_task_file_path,
 )
 from app.services.task_history_service import task_to_history_summary
 
@@ -41,15 +45,45 @@ FORMULA_MODE_PROMPT = (
 )
 
 
-async def _get_task_info_or_404(task_id: str) -> dict:
-    task_manager = get_task_manager()
-    task_info = await task_manager.get_task_status(task_id)
-    if not task_info:
+async def _get_owned_task_or_404(task_id: str, owner_hash: str) -> Task:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Task).where(Task.task_id == task_id, Task.owner_hash == owner_hash)
+        )
+        task = result.scalar_one_or_none()
+
+    if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task not found: {task_id}",
         )
-    return task_info
+    return task
+
+
+def _task_to_status_info(task: Task) -> dict:
+    return {
+        "task_id": task.task_id,
+        "document_id": task.document_id,
+        "status": task.status,
+        "progress": task.progress,
+        "current_step": task.current_step,
+        "created_at": task.created_at,
+        "started_at": task.started_at,
+        "completed_at": task.completed_at,
+        "error_message": task.error_message,
+        "result_file_path": task.result_file_path,
+        "processing_mode": task.processing_mode,
+        "priority": task.priority,
+        "retry_count": task.retry_count,
+        "worker_id": task.worker_id,
+        "original_filename": task.original_filename,
+        "source_file_path": task.file_path,
+    }
+
+
+async def _get_task_info_or_404(task_id: str, owner_hash: str) -> dict:
+    task = await _get_owned_task_or_404(task_id, owner_hash)
+    return _task_to_status_info(task)
 
 
 def _read_task_result(task_info: dict) -> dict:
@@ -69,19 +103,24 @@ def _read_task_result(task_info: dict) -> dict:
         return {}
 
 
-async def _get_task_file_info(task_id: str) -> dict:
+def _get_task_file_info(task_info: dict) -> dict:
+    return {
+        "original_filename": task_info.get("original_filename"),
+        "source_file_path": task_info.get("source_file_path"),
+    }
+
+
+async def _delete_task_and_files(db, task: Task) -> None:
+    if task.status in {TaskStatus.PENDING, TaskStatus.PROCESSING}:
+        task.status = TaskStatus.CANCELLED
+        task.completed_at = datetime.now(UTC)
+
     try:
-        async with AsyncSessionLocal() as db:
-            task = await TaskRepository(db).get_by_task_id(task_id)
-            if not task:
-                return {}
-            return {
-                "original_filename": task.original_filename,
-                "source_file_path": task.file_path,
-            }
-    except Exception as exc:
-        logger.warning(f"Failed to read source file info for task {task_id}: {exc}")
-        return {}
+        delete_task_files(task.task_id, settings.OUTPUT_DIR)
+    except FileNotFoundError:
+        pass
+
+    await db.delete(task)
 
 
 @router.post(
@@ -95,6 +134,7 @@ async def submit_task(
     priority: int = Form(2, description="1=低,2=正常,3=高,4=紧急"),
     custom_url : str = Form(None, description=""),
     output_format: str = Form("markdown"),
+    owner: OwnerSession = Depends(get_owner_session),
 ):
     """
     提交新任务
@@ -142,20 +182,29 @@ async def submit_task(
         file_size = saved_path_obj.stat().st_size
         file_type = saved_path_obj.suffix.lstrip(".").lower()
 
-        # 提交任务
         task_manager = get_task_manager()
-        await task_manager.submit_task(
-            task_id=task_id,
-            document_id=document_id,
-            original_filename=file.filename,
-            file_type=file_type,
-            file_size=file_size,
-            file_path=str(saved_path_obj),
-            processing_mode=processing_mode,
-            priority=priority,
-            ocr_config=parsed_ocr_config,
-            output_format=output_format,
-        )
+        if not task_manager.is_running:
+            raise RuntimeError("TaskManager is not running")
+
+        async with AsyncSessionLocal() as db:
+            db.add(
+                Task(
+                    task_id=task_id,
+                    owner_hash=owner.owner_hash,
+                    document_id=document_id,
+                    original_filename=file.filename,
+                    file_type=file_type,
+                    file_size=file_size,
+                    file_path=str(saved_path_obj),
+                    processing_mode=processing_mode,
+                    priority=priority,
+                    ocr_config=parsed_ocr_config or {},
+                    output_format=output_format,
+                    status=TaskStatus.PENDING,
+                    progress=0.0,
+                )
+            )
+            await db.commit()
 
         return ApiResponse(
             success=True,
@@ -181,7 +230,10 @@ async def submit_task(
 
 
 @router.get("/file")
-async def read_file(path: str):
+async def read_file(
+    path: str,
+    owner: OwnerSession = Depends(get_owner_session),
+):
     """
     读取指定路径的文件内容
 
@@ -209,6 +261,16 @@ async def read_file(path: str):
                 detail=f"Path is not a file: {path}",
             )
 
+        try:
+            task_id = task_id_from_task_file_path(file_path, settings.OUTPUT_DIR)
+        except TaskFileAccessError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task file not found: {path}",
+            )
+
+        await _get_owned_task_or_404(task_id, owner.owner_hash)
+
         # 获取文件MIME类型
         mime_type, _ = guess_type(file_path.name)
         if mime_type is None:
@@ -220,13 +282,13 @@ async def read_file(path: str):
 
         # 预览器需要直接加载图片和 PDF 的二进制内容。
         if mime_type.startswith("image/") or mime_type == "application/pdf":
-            return Response(
+            return attach_owner_cookie(Response(
                 content=content,
                 media_type=mime_type,
                 headers={
                     "Content-Disposition": f"inline; filename=\"{file_path.name}\""
                 }
-            )
+            ), owner)
 
         # 其他文件类型，返回JSON格式
         try:
@@ -257,14 +319,17 @@ async def read_file(path: str):
 
 
 @router.get("/{task_id}", response_model=ApiResponse[dict])
-async def get_task_status(task_id: str):
+async def get_task_status(
+    task_id: str,
+    owner: OwnerSession = Depends(get_owner_session),
+):
     """
     获取任务状态
 
     - **task_id**: 任务ID
     """
     try:
-        task_info = await _get_task_info_or_404(task_id)
+        task_info = await _get_task_info_or_404(task_id, owner.owner_hash)
 
         # 如果有 result_file_path，读取并合并内容
         result_data = _read_task_result(task_info)
@@ -278,7 +343,7 @@ async def get_task_status(task_id: str):
         if started_at and completed_at:
             execution_time = (completed_at - started_at).total_seconds()
 
-        file_info = await _get_task_file_info(task_id)
+        file_info = _get_task_file_info(task_info)
         response_data = {
             "task_id": task_info.get("task_id"),
             "document_id": task_info.get("document_id"),
@@ -331,14 +396,17 @@ async def get_task_status(task_id: str):
 
 
 @router.get("/{task_id}/formulas", response_model=ApiResponse[dict])
-async def list_task_formulas(task_id: str):
+async def list_task_formulas(
+    task_id: str,
+    owner: OwnerSession = Depends(get_owner_session),
+):
     """
     列出任务中的公式块
 
     - **task_id**: 任务ID
     """
     try:
-        task_info = await _get_task_info_or_404(task_id)
+        task_info = await _get_task_info_or_404(task_id, owner.owner_hash)
         result_data = _read_task_result(task_info)
         formulas = result_data.get("formulas") or extract_formulas_from_layout(
             result_data.get("layout"),
@@ -365,7 +433,11 @@ async def list_task_formulas(task_id: str):
 
 
 @router.get("/{task_id}/formulas/export")
-async def export_task_formulas(task_id: str, formats: str = "latex,mathml,png"):
+async def export_task_formulas(
+    task_id: str,
+    formats: str = "latex,mathml,png",
+    owner: OwnerSession = Depends(get_owner_session),
+):
     """
     导出任务中的公式
 
@@ -373,7 +445,7 @@ async def export_task_formulas(task_id: str, formats: str = "latex,mathml,png"):
     - **formats**: 逗号分隔格式，支持 latex,mathml,png
     """
     try:
-        task_info = await _get_task_info_or_404(task_id)
+        task_info = await _get_task_info_or_404(task_id, owner.owner_hash)
         result_data = _read_task_result(task_info)
         formulas = result_data.get("formulas") or extract_formulas_from_layout(
             result_data.get("layout"),
@@ -402,43 +474,86 @@ async def export_task_formulas(task_id: str, formats: str = "latex,mathml,png"):
 
 
 @router.delete("/{task_id}", response_model=ApiResponse[dict])
-async def cancel_task(task_id: str):
+async def delete_task(
+    task_id: str,
+    owner: OwnerSession = Depends(get_owner_session),
+):
     """
-    取消任务
+    删除任务及其持久化文件
 
     - **task_id**: 任务ID
     """
     try:
-        task_manager = get_task_manager()
-        success = await task_manager.cancel_task(task_id)
-
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Task not found or cannot be cancelled: {task_id}",
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Task).where(
+                    Task.task_id == task_id,
+                    Task.owner_hash == owner.owner_hash,
+                )
             )
+            task = result.scalar_one_or_none()
+            if not task:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Task not found: {task_id}",
+                )
+
+            await _delete_task_and_files(db, task)
+            await db.commit()
 
         return ApiResponse(
             success=True,
             data={
                 "task_id": task_id,
-                "status": "cancelled",
+                "deleted": True,
             },
-            message="Task cancelled successfully",
+            message="Task deleted successfully",
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to cancel task: {e}")
+        logger.error(f"Failed to delete task: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to cancel task: {str(e)}",
+            detail=f"Failed to delete task: {str(e)}",
+        )
+
+
+@router.delete("/", response_model=ApiResponse[dict])
+async def delete_all_tasks(owner: OwnerSession = Depends(get_owner_session)):
+    """删除当前匿名 owner 的所有任务及任务文件。"""
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Task).where(Task.owner_hash == owner.owner_hash)
+            )
+            tasks = list(result.scalars().all())
+            for task in tasks:
+                await _delete_task_and_files(db, task)
+            await db.commit()
+
+        return ApiResponse(
+            success=True,
+            data={"deleted": len(tasks)},
+            message="Tasks deleted successfully",
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to delete tasks: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete tasks: {str(e)}",
         )
 
 
 @router.get("/", response_model=ApiResponse[dict])
-async def list_tasks(status: Optional[str] = None, limit: int = 100, offset: int = 0):
+async def list_tasks(
+    status: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    owner: OwnerSession = Depends(get_owner_session),
+):
     """
     列出任务
 
@@ -448,12 +563,17 @@ async def list_tasks(status: Optional[str] = None, limit: int = 100, offset: int
     """
     try:
         async with AsyncSessionLocal() as db:
-            task_repo = TaskRepository(db)
-            tasks = await task_repo.list_tasks_by_status(
-                status=status,
-                skip=offset,
-                limit=limit,
+            conditions = [Task.owner_hash == owner.owner_hash]
+            if status:
+                conditions.append(Task.status == status)
+            result = await db.execute(
+                select(Task)
+                .where(*conditions)
+                .order_by(Task.created_at.desc())
+                .offset(offset)
+                .limit(limit)
             )
+            tasks = list(result.scalars().all())
 
         return ApiResponse(
             success=True,

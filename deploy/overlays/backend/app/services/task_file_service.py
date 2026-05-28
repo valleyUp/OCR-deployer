@@ -31,3 +31,16 @@ def resolve_task_file_path(requested_path: str, output_dir: str) -> Path:
     if not resolved.is_file():
         raise IsADirectoryError(str(resolved))
     return resolved
+
+
+def task_id_from_task_file_path(file_path: Path, output_dir: str) -> str:
+    """Return the task_id folder for an already-resolved task file path."""
+    base_dir = Path(output_dir).expanduser().resolve()
+    resolved = file_path.expanduser().resolve(strict=True)
+    if not resolved.is_relative_to(base_dir):
+        raise TaskFileAccessError(f"task file path is outside output dir: {file_path}")
+
+    relative = resolved.relative_to(base_dir)
+    if not relative.parts:
+        raise TaskFileAccessError(f"task file path has no task id: {file_path}")
+    return relative.parts[0]

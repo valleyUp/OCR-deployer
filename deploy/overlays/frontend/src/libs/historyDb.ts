@@ -9,6 +9,7 @@ export type HistoryStatus =
 
 export interface HistoryRecord {
 	localId: string
+	ownerId: string
 	taskId?: string | number
 	fileName: string
 	fileSize: number
@@ -30,7 +31,7 @@ export interface HistoryRecord {
 }
 
 const DB_NAME = 'ocr-deployer'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'history'
 const STORE_SIZE_LIMIT = 200 * 1024 * 1024 // 200 MB soft cap
 
@@ -46,10 +47,16 @@ function openDb(): Promise<IDBDatabase> {
 		const request = indexedDB.open(DB_NAME, DB_VERSION)
 		request.onupgradeneeded = () => {
 			const db = request.result
+			let store: IDBObjectStore
 			if (!db.objectStoreNames.contains(STORE_NAME)) {
-				const store = db.createObjectStore(STORE_NAME, { keyPath: 'localId' })
+				store = db.createObjectStore(STORE_NAME, { keyPath: 'localId' })
 				store.createIndex('createdAt', 'createdAt', { unique: false })
 				store.createIndex('status', 'status', { unique: false })
+			} else {
+				store = request.transaction!.objectStore(STORE_NAME)
+			}
+			if (!store.indexNames.contains('ownerId')) {
+				store.createIndex('ownerId', 'ownerId', { unique: false })
 			}
 		}
 		request.onsuccess = () => resolve(request.result)
@@ -73,20 +80,23 @@ export async function putRecord(record: HistoryRecord): Promise<void> {
 	)
 }
 
-export async function getRecord(localId: string): Promise<HistoryRecord | undefined> {
+export async function getRecord(localId: string, ownerId?: string): Promise<HistoryRecord | undefined> {
 	const db = await openDb()
-	return toPromise(
+	const record = await toPromise<HistoryRecord | undefined>(
 		db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(localId)
 	)
+	if (ownerId && record?.ownerId !== ownerId) return undefined
+	return record
 }
 
-export async function listRecords(): Promise<HistoryRecord[]> {
+export async function listRecords(ownerId?: string): Promise<HistoryRecord[]> {
 	const db = await openDb()
 	const all = await toPromise<HistoryRecord[]>(
 		db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAll()
 	)
-	all.sort((a, b) => b.createdAt - a.createdAt)
-	return all
+	const records = ownerId ? all.filter(record => record.ownerId === ownerId) : all
+	records.sort((a, b) => b.createdAt - a.createdAt)
+	return records
 }
 
 export async function deleteRecord(localId: string): Promise<void> {
@@ -96,8 +106,15 @@ export async function deleteRecord(localId: string): Promise<void> {
 	)
 }
 
-export async function clearAll(): Promise<void> {
+export async function clearAll(ownerId?: string): Promise<void> {
 	const db = await openDb()
+	if (ownerId) {
+		const all = await listRecords(ownerId)
+		await Promise.all(
+			all.map(record => deleteRecord(record.localId))
+		)
+		return
+	}
 	await toPromise(
 		db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).clear()
 	)
@@ -160,9 +177,13 @@ export const HISTORY_SIZE_LIMIT = STORE_SIZE_LIMIT
 // mergeServerRecords() won't resurrect them on the next page load.
 const DELETED_TASK_IDS_KEY = 'ocr:deletedTaskIds'
 
-export function getDeletedTaskIds(): Set<string> {
+function deletedTaskIdsKey(ownerId?: string): string {
+	return ownerId ? `${DELETED_TASK_IDS_KEY}:${ownerId}` : DELETED_TASK_IDS_KEY
+}
+
+export function getDeletedTaskIds(ownerId?: string): Set<string> {
 	try {
-		const raw = localStorage.getItem(DELETED_TASK_IDS_KEY)
+		const raw = localStorage.getItem(deletedTaskIdsKey(ownerId))
 		if (!raw) return new Set()
 		const parsed = JSON.parse(raw)
 		return new Set(Array.isArray(parsed) ? parsed.map(String) : [])
@@ -171,18 +192,18 @@ export function getDeletedTaskIds(): Set<string> {
 	}
 }
 
-export function addDeletedTaskIds(taskIds: (string | number)[]): void {
-	const existing = getDeletedTaskIds()
+export function addDeletedTaskIds(taskIds: (string | number)[], ownerId?: string): void {
+	const existing = getDeletedTaskIds(ownerId)
 	for (const id of taskIds) {
 		if (id !== undefined && id !== null) existing.add(String(id))
 	}
 	try {
-		localStorage.setItem(DELETED_TASK_IDS_KEY, JSON.stringify([...existing]))
+		localStorage.setItem(deletedTaskIdsKey(ownerId), JSON.stringify([...existing]))
 	} catch { /* ignore quota errors */ }
 }
 
-export function clearDeletedTaskIds(): void {
+export function clearDeletedTaskIds(ownerId?: string): void {
 	try {
-		localStorage.removeItem(DELETED_TASK_IDS_KEY)
+		localStorage.removeItem(deletedTaskIdsKey(ownerId))
 	} catch { /* ignore */ }
 }

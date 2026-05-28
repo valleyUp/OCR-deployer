@@ -8,7 +8,7 @@ import { ResizableDivider } from '@/components/app/ResizableDivider'
 import { LinkBridge } from '@/components/link/LinkBridge'
 import { useHistoryStore } from '@/store/useHistoryStore'
 import { useConfigStore } from '@/store/useConfigStore'
-import { getTaskStatus, listTasks, taskFileUrl, type TaskListItem } from '@/libs/api'
+import { getSession, getTaskStatus, listTasks, taskFileUrl, type TaskListItem } from '@/libs/api'
 import type { HistoryRecord } from '@/libs/historyDb'
 import '@/styles-overlay.css'
 
@@ -48,11 +48,12 @@ function toHistoryStatus(status: TaskListItem['status']): HistoryRecord['status'
   return 'failed'
 }
 
-function serverTaskToRecord(task: TaskListItem): HistoryRecord {
+function serverTaskToRecord(task: TaskListItem, ownerId: string): HistoryRecord {
   const taskId = String(task.task_id)
   const fileName = task.original_filename || `task-${taskId}`
   return {
     localId: `task:${taskId}`,
+    ownerId,
     taskId,
     fileName,
     fileSize: task.file_size ?? 0,
@@ -103,28 +104,47 @@ export function OCRPage() {
   const ensureConfigLoaded = useConfigStore(s => s.ensureLoaded)
   const records = useHistoryStore(s => s.records)
   const hydrated = useHistoryStore(s => s.hydrated)
-  const hydrate = useHistoryStore(s => s.hydrate)
+  const ownerId = useHistoryStore(s => s.ownerId)
+  const setHistoryOwner = useHistoryStore(s => s.setOwner)
   const upsertHistory = useHistoryStore(s => s.upsert)
   const mergeServerRecords = useHistoryStore(s => s.mergeServerRecords)
 
-  useEffect(() => { setResultsWidth(readStoredWidth()); void ensureConfigLoaded(); void hydrate() }, [ensureConfigLoaded, hydrate])
+  useEffect(() => {
+    setResultsWidth(readStoredWidth())
+    void ensureConfigLoaded()
+    let cancelled = false
+    const loadSession = async () => {
+      try {
+        const session = await getSession()
+        if (!cancelled) await setHistoryOwner(session.owner_id)
+      } catch (error) {
+        console.error('[history] session load failed:', error)
+      }
+    }
+    void loadSession()
+    return () => { cancelled = true }
+  }, [ensureConfigLoaded, setHistoryOwner])
 
   useEffect(() => {
-    if (!hydrated || serverHistoryLoadedRef.current) return
+    serverHistoryLoadedRef.current = false
+  }, [ownerId])
+
+  useEffect(() => {
+    if (!hydrated || !ownerId || serverHistoryLoadedRef.current) return
     serverHistoryLoadedRef.current = true
     let cancelled = false
     const sync = async () => {
       try {
         const data = await listTasks({ limit: 100 })
         if (cancelled) return
-        await mergeServerRecords(data.tasks.map(serverTaskToRecord))
+        await mergeServerRecords(data.tasks.map(task => serverTaskToRecord(task, ownerId)))
       } catch (error) {
         console.error('[history] server sync failed:', error)
       }
     }
     void sync()
     return () => { cancelled = true }
-  }, [hydrated, mergeServerRecords])
+  }, [hydrated, mergeServerRecords, ownerId])
 
   const activeRecord = useMemo(() => records.find(r => r.localId === currentLocalId) ?? null, [records, currentLocalId])
 
@@ -182,11 +202,13 @@ export function OCRPage() {
       <AppHeader uploadFile={uploadFile} result={parsedResult} />
       <main className='shell'>
         <aside className='sidebar'>
-          <FileUpload
-            currentLocalId={currentLocalId}
-            onActiveTaskChange={id => setCurrentLocalId(id)}
-            onFileReady={handleFileReady}
-          />
+          {ownerId && (
+            <FileUpload
+              currentLocalId={currentLocalId}
+              onActiveTaskChange={id => setCurrentLocalId(id)}
+              onFileReady={handleFileReady}
+            />
+          )}
           <HistoryPanel
             currentLocalId={currentLocalId}
             onSelect={r => setCurrentLocalId(r.localId)}

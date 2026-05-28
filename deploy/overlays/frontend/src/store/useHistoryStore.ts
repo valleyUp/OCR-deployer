@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { toast } from 'sonner'
+import { deleteAllTasks, deleteTask } from '@/libs/api'
 import {
 	addDeletedTaskIds,
 	clearAll,
@@ -14,7 +16,9 @@ import {
 interface HistoryState {
 	records: HistoryRecord[]
 	hydrated: boolean
-	hydrate: () => Promise<void>
+	ownerId: string | null
+	setOwner: (ownerId: string) => Promise<void>
+	hydrate: (ownerId?: string) => Promise<void>
 	upsert: (patch: Partial<HistoryRecord> & { localId: string }) => Promise<void>
 	mergeServerRecords: (records: HistoryRecord[]) => Promise<void>
 	remove: (localId: string) => Promise<void>
@@ -24,10 +28,11 @@ interface HistoryState {
 
 function mergeRecord(
 	existing: HistoryRecord | undefined,
-	patch: Partial<HistoryRecord> & { localId: string }
+	patch: Partial<HistoryRecord> & { localId: string; ownerId: string }
 ): HistoryRecord {
 	const defaults: HistoryRecord = {
 		localId: patch.localId,
+		ownerId: patch.ownerId,
 		fileName: '',
 		fileSize: 0,
 		fileType: '',
@@ -45,21 +50,34 @@ function mergeRecord(
 export const useHistoryStore = create<HistoryState>((set, get) => ({
 	records: [],
 	hydrated: false,
+	ownerId: null,
 
-	hydrate: async () => {
-		if (get().hydrated) return
+	setOwner: async ownerId => {
+		if (get().ownerId === ownerId && get().hydrated) return
 		try {
-			const records = await listRecords()
-			set({ records, hydrated: true })
+			const records = await listRecords(ownerId)
+			set({ ownerId, records, hydrated: true })
 		} catch (error) {
 			console.error('[history] hydrate failed:', error)
-			set({ hydrated: true })
+			set({ ownerId, records: [], hydrated: true })
 		}
 	},
 
+	hydrate: async ownerId => {
+		const activeOwnerId = ownerId ?? get().ownerId
+		if (!activeOwnerId) return
+		if (get().hydrated && get().ownerId === activeOwnerId) return
+		await get().setOwner(activeOwnerId)
+	},
+
 	upsert: async patch => {
+		const ownerId = patch.ownerId ?? get().ownerId
+		if (!ownerId) {
+			console.error('[history] upsert skipped without owner id')
+			return
+		}
 		const existing = get().records.find(r => r.localId === patch.localId)
-		const next = mergeRecord(existing, patch)
+		const next = mergeRecord(existing, { ...patch, ownerId })
 		try {
 			await putRecord(next)
 			await pruneToQuota()
@@ -74,15 +92,18 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
 	mergeServerRecords: async incoming => {
 		if (!incoming.length) return
+		const ownerId = get().ownerId
+		if (!ownerId) return
 
 		// Skip records whose taskId was explicitly deleted by the user
-		const deletedIds = getDeletedTaskIds()
+		const deletedIds = getDeletedTaskIds(ownerId)
+		const ownerRecords = incoming.map(record => ({ ...record, ownerId }))
 		const filtered = deletedIds.size
-			? incoming.filter(r => !(r.taskId !== undefined && r.taskId !== null && deletedIds.has(String(r.taskId))))
-			: incoming
+			? ownerRecords.filter(r => !(r.taskId !== undefined && r.taskId !== null && deletedIds.has(String(r.taskId))))
+			: ownerRecords
 		if (!filtered.length) return
 
-		const existingRecords = get().records
+		const existingRecords = get().records.filter(record => record.ownerId === ownerId)
 		const byTaskId = new Map(
 			existingRecords
 				.filter(record => record.taskId !== undefined && record.taskId !== null)
@@ -99,6 +120,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 			const next = mergeRecord(existing ?? mergedByLocalId.get(localId), {
 				...record,
 				localId,
+				ownerId,
 				result: preservedResult,
 				resultStripped: preservedResult
 					? existing?.resultStripped
@@ -126,9 +148,16 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
 	remove: async localId => {
 		// Remember the server taskId so mergeServerRecords won't revive it
+		const ownerId = get().ownerId
 		const record = get().records.find(r => r.localId === localId)
 		if (record?.taskId !== undefined && record?.taskId !== null) {
-			addDeletedTaskIds([record.taskId])
+			addDeletedTaskIds([record.taskId], ownerId ?? undefined)
+			try {
+				await deleteTask(record.taskId)
+			} catch (error) {
+				console.error('[history] server delete failed:', error)
+				toast.error('Server task delete failed')
+			}
 		}
 		try {
 			await deleteRecord(localId)
@@ -142,12 +171,20 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
 	clear: async () => {
 		// Mark all server-originated records as deleted before wiping
+		const ownerId = get().ownerId
+		if (!ownerId) return
 		const taskIds = get().records
 			.filter(r => r.taskId !== undefined && r.taskId !== null)
 			.map(r => r.taskId!)
-		if (taskIds.length) addDeletedTaskIds(taskIds)
+		if (taskIds.length) addDeletedTaskIds(taskIds, ownerId)
 		try {
-			await clearAll()
+			await deleteAllTasks()
+		} catch (error) {
+			console.error('[history] server clear failed:', error)
+			toast.error('Server history clear failed')
+		}
+		try {
+			await clearAll(ownerId)
 		} catch (error) {
 			console.error('[history] clear failed:', error)
 		}
@@ -158,7 +195,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 		const inMemory = get().records.find(r => r.localId === localId)
 		if (inMemory?.result) return inMemory
 		try {
-			const fromDb = await getRecord(localId)
+			const fromDb = await getRecord(localId, get().ownerId ?? undefined)
 			if (fromDb) {
 				set(state => ({
 					records: state.records.map(r =>

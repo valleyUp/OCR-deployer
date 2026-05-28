@@ -5,7 +5,8 @@ const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 // 创建 axios 实例
 const api = axios.create({
 	baseURL: BASE_URL,
-	timeout: 60000 // 60秒超时
+	timeout: 60000, // 60秒超时
+	withCredentials: true
 })
 
 // 请求拦截器
@@ -46,6 +47,15 @@ export interface ApiResponse<T> {
 	data: T
 	message?: string | null
 	error?: string | null
+}
+
+export interface SessionData {
+	owner_id: string
+}
+
+export async function getSession(): Promise<SessionData> {
+	const response = await api.get<SessionData>('/session')
+	return response.data
 }
 
 // 上传接口返回的 data 结构
@@ -188,6 +198,22 @@ export async function listTasks(params: { status?: string; limit?: number; offse
 	}
 
 	return response.data.data
+}
+
+export async function deleteTask(taskId: string | number): Promise<void> {
+	const response = await api.delete<ApiResponse<{ task_id: string | number; deleted: boolean }>>(`/tasks/${taskId}`)
+
+	if (!response.data.success) {
+		throw new Error(response.data.message || '删除任务失败')
+	}
+}
+
+export async function deleteAllTasks(): Promise<void> {
+	const response = await api.delete<ApiResponse<{ deleted: number }>>('/tasks/')
+
+	if (!response.data.success) {
+		throw new Error(response.data.message || '清空任务失败')
+	}
 }
 
 /**

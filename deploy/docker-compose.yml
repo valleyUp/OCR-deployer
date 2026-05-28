@@ -105,6 +105,10 @@ services:
       MAX_CONCURRENT_TASKS: ${MAX_CONCURRENT_TASKS:-5}
       LAYOUT_PAGE_PARALLELISM: ${LAYOUT_PAGE_PARALLELISM:-1}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+      OWNER_COOKIE_NAME: ${OWNER_COOKIE_NAME:-ocr_owner_token}
+      OWNER_COOKIE_MAX_AGE_DAYS: ${OWNER_COOKIE_MAX_AGE_DAYS:-365}
+      OWNER_COOKIE_SECURE: ${OWNER_COOKIE_SECURE:-false}
+      PURGE_LEGACY_OWNERLESS_TASKS: ${PURGE_LEGACY_OWNERLESS_TASKS:-true}
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
       interval: 30s

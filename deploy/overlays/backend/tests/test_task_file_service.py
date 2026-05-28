@@ -1,6 +1,10 @@
 import pytest
 
-from app.services.task_file_service import TaskFileAccessError, resolve_task_file_path
+from app.services.task_file_service import (
+    TaskFileAccessError,
+    resolve_task_file_path,
+    task_id_from_task_file_path,
+)
 
 
 def test_resolve_task_file_path_accepts_output_file(tmp_path):
@@ -9,6 +13,7 @@ def test_resolve_task_file_path_accepts_output_file(tmp_path):
     source.write_bytes(b"%PDF-1.4\n")
 
     assert resolve_task_file_path(str(source), str(tmp_path)) == source.resolve()
+    assert task_id_from_task_file_path(source, str(tmp_path)) == "task-1"
 
 
 def test_resolve_task_file_path_accepts_relative_output_file(tmp_path, monkeypatch):

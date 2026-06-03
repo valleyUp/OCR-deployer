@@ -13,6 +13,8 @@ import './markdown.css'
 import rehypeMathInHtml from '@/libs/rehypeMathInHtml'
 import { useMdVirtualRendering } from '@/hooks/useMdVirtualRendering'
 import { CopyButton } from './CopyButton'
+import { CopyTableButton } from './CopyTableButton'
+import { isMarkdownTable } from '@/libs/tableUtils'
 import { useLinkState, useLinkStore } from '@/hooks/useLinkState'
 import { cn } from '@/libs/utils'
 
@@ -132,6 +134,7 @@ export function MarkdownPreview() {
 					const isLinked = activeLinkId === String(block.id)
 					const isActive = isHovered || isSelected || isLinked
 					const isImage = block.isImage || false
+					const isTable = isMarkdownTable(block.content)
 
 					if (!isInRange) {
 						const height = blockHeights[index] || VIRTUAL_CONFIG.DEFAULT_BLOCK_HEIGHT
@@ -181,7 +184,11 @@ export function MarkdownPreview() {
 								</ReactMarkdown>
 							</div>
 							{showCopyButton && isActive && !isImage && (
-								<CopyButton content={block.content} />
+								isTable ? (
+									<CopyTableButton content={block.content} />
+								) : (
+									<CopyButton content={block.content} />
+								)
 							)}
 						</div>
 					)

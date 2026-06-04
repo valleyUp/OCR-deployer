@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { ArrowRight, FileText, LocateFixed, Maximize2, Minus, PanelTopClose, PanelTopOpen, Plus, RotateCw } from 'lucide-react'
+import { ArrowRight, FileText, LocateFixed, Maximize2, Minus, Plus, RotateCw } from 'lucide-react'
 import type { TaskResponse, UploadedFile } from './FileUpload'
 import { useOcrStore } from '../../store/useOcrStore'
 import { useLinkStore } from '@/hooks/useLinkState'
@@ -32,7 +32,6 @@ export function FilePreview({ file, result }: FilePreviewProps) {
   const [_showCopy, setShowCopy] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
-  const [showToolbar, setShowToolbar] = useState(true)
 
   const lower = file?.name.toLowerCase() ?? ''
   const isPdf = Boolean(file && (file.type === 'application/pdf' || lower.endsWith('.pdf')))
@@ -133,42 +132,17 @@ export function FilePreview({ file, result }: FilePreviewProps) {
 
   return (
     <div className='workspace'>
-      {showToolbar && (
-        <div className='preview-toolbar'>
-          <div className='preview-breadcrumb'>
-            <span>task /</span> <strong>{file.name}</strong>
-          </div>
-          <div className='preview-badges'>
-            <span className='preview-badge'><LocateFixed size={12} />{activeBlock?.layoutType || 'preview'}</span>
-            <span className='preview-badge' style={{ color: result?.status === 'completed' ? 'var(--color-success)' : result?.status === 'failed' ? 'var(--color-error)' : 'var(--color-text-secondary)' }}>
-              {result?.status === 'completed' ? 'done' : result?.status === 'failed' ? 'failed' : result?.status === 'processing' ? 'processing' : 'idle'}
-            </span>
-            <Button 
-              variant='ghost' 
-              size='icon-sm' 
-              className='btn-ghost size-8 ml-2' 
-              onClick={() => setShowToolbar(false)}
-              title='Hide toolbar'
-            >
-              <PanelTopClose size={16} />
-            </Button>
-          </div>
+      <div className='preview-toolbar'>
+        <div className='preview-breadcrumb'>
+          <span>task /</span> <strong>{file.name}</strong>
         </div>
-      )}
-
-      {!showToolbar && (
-        <div className='absolute top-2 right-2 z-30'>
-          <Button 
-            variant='ghost' 
-            size='icon-sm' 
-            className='btn-ghost size-8 bg-white/85 backdrop-blur-xl border border-[var(--color-border)] shadow-sm' 
-            onClick={() => setShowToolbar(true)}
-            title='Show toolbar'
-          >
-            <PanelTopOpen size={16} />
-          </Button>
+        <div className='preview-badges'>
+          <span className='preview-badge'><LocateFixed size={12} />{activeBlock?.layoutType || 'preview'}</span>
+          <span className='preview-badge' style={{ color: result?.status === 'completed' ? 'var(--color-success)' : result?.status === 'failed' ? 'var(--color-error)' : 'var(--color-text-secondary)' }}>
+            {result?.status === 'completed' ? 'done' : result?.status === 'failed' ? 'failed' : result?.status === 'processing' ? 'processing' : 'idle'}
+          </span>
         </div>
-      )}
+      </div>
 
       <div className='preview-container' ref={viewerRef}>
         <div className='preview-canvas' style={{ position: 'relative', minHeight: isPdf ? 'auto' : 400 }}>

@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.api import task_context
 from app.api import tasks as tasks_api
 from app.models.base import Base
 from app.models.task import Task
@@ -30,7 +31,7 @@ def _build_client(tmp_path, monkeypatch):
             await conn.run_sync(Base.metadata.create_all)
 
     asyncio.run(setup_db())
-    monkeypatch.setattr(tasks_api, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(task_context, "AsyncSessionLocal", session_factory)
     app = FastAPI()
     app.include_router(tasks_api.router, prefix="/api/v1")
     return TestClient(app), session_factory, engine
@@ -87,7 +88,9 @@ def test_file_endpoint_returns_pdf_inline_for_owner(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/pdf")
-    assert response.headers["content-disposition"] == 'inline; filename="source file.pdf"'
+    assert (
+        response.headers["content-disposition"] == 'inline; filename="source file.pdf"'
+    )
     assert response.content == content
     asyncio.run(engine.dispose())
 

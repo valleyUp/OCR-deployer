@@ -3,7 +3,14 @@ import json
 import shutil
 import zipfile
 
+import pytest
+
+from app.services import formula_service
 from app.services.formula_service import (
+    FORMULA_FORMATS,
+    FORMULA_LAYOUT_TYPES,
+    MATH_PATTERN,
+    TEXLIVE_PACKAGES,
     FormulaRenderError,
     build_formulas_zip,
     extract_formulas_from_layout,
@@ -13,7 +20,13 @@ from app.services.formula_service import (
     should_keep_formula_mode_block,
     validate_texlive_source,
 )
-import pytest
+
+
+def test_formula_service_keeps_legacy_constants():
+    assert "formula_number" in FORMULA_LAYOUT_TYPES
+    assert {"latex", "mathml", "unicodemath"} <= FORMULA_FORMATS
+    assert MATH_PATTERN.search("where $x_i = 1$")
+    assert "amsmath" in TEXLIVE_PACKAGES
 
 
 def test_extracts_structured_formula_blocks():
@@ -120,7 +133,8 @@ def test_zip_export_records_bad_formula_without_failing_archive():
 
 def test_unicodemath_falls_back_when_renderer_is_missing(monkeypatch):
     monkeypatch.setattr(
-        "app.services.formula_service._renderer_script",
+        formula_service,
+        "_renderer_script",
         lambda: "/nonexistent/formula-renderer.cjs",
     )
 

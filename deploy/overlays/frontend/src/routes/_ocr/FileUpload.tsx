@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, FileText, Loader2, Sigma, Upload } from 'lucide-react'
 import { cn } from '@/libs/utils'
-import { getTaskStatus, uploadTask, type TaskStatus, type TaskStatusData } from '@/libs/api'
+import { getApiErrorMessage, getTaskStatus, uploadTask, type TaskStatus, type TaskStatusData } from '@/libs/api'
 import { toast } from 'sonner'
 import { useHistoryStore } from '@/store/useHistoryStore'
 import { useConfigStore } from '@/store/useConfigStore'
@@ -72,7 +72,9 @@ export function FileUpload({ currentLocalId, onActiveTaskChange, onFileReady }: 
         }catch{stopPoll(localId)}
       }
       poll(); pollingRef.current.set(localId,setInterval(poll,POLL_MS))
-    }catch(e:any){toast.error(e.response?.data?.message||e.message||'Upload failed')}
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Upload failed'))
+    }
   }
 
   useEffect(()=>()=>{pollingRef.current.forEach(h=>clearInterval(h));pollingRef.current.clear()},[])

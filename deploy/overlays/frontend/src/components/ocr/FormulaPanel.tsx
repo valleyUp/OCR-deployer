@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, FileArchive, Loader2, Sigma } from 'lucide-react'
 import { cn, copyToClipboard } from '@/libs/utils'
-import { exportTaskFormulas, type FormulaItem } from '@/libs/api'
+import { exportTaskFormulas, getApiErrorMessage, type FormulaItem } from '@/libs/api'
 import {
   renderFormulaSvg,
   renderFormulaMathML,
@@ -105,7 +105,7 @@ export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPane
       if (!copied) throw new Error('clipboard is unavailable')
       toast.success(COPY_SUCCESS[format]); setCopiedKey(bk)
       setTimeout(() => setCopiedKey(p => p === bk ? null : p), 1200)
-    } catch (e: any) { toast.error(`Copy failed: ${e.message}`) }
+    } catch (error) { toast.error(`Copy failed: ${getApiErrorMessage(error, 'clipboard is unavailable')}`) }
     finally { setCopyBusy(null) }
   }, [])
 
@@ -115,7 +115,7 @@ export function FormulaPanel({ formulas, taskId, searchQuery = '' }: FormulaPane
       const blob = await exportTaskFormulas(taskId, ['latex', 'mathml', 'unicodemath', 'png'])
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${taskId}-formulas.zip`; a.click()
       toast.success('Export started')
-    } catch (e: any) { toast.error(`Export failed: ${e.message}`) }
+    } catch (error) { toast.error(`Export failed: ${getApiErrorMessage(error, 'Export failed')}`) }
     finally { setExportBusy(false) }
   }
 

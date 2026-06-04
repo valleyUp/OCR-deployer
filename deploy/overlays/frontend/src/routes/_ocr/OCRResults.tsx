@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { JsonPreview } from '@/components/ocr/JsonPreview'
 import { FormulaPanel } from '@/components/ocr/FormulaPanel'
-import type { FormulaItem } from '@/libs/api'
+import type { FormulaItem, TaskLayoutBlock } from '@/libs/api'
 
 interface OCRResultsProps { result: TaskResponse | null; fileName?: string }
 type ResultTab = 'markdown' | 'json' | 'formulas'
@@ -23,6 +23,9 @@ type ResultBlock = {
   latex?: string
   width: number
   height: number
+}
+type ResultLayoutBlock = TaskLayoutBlock & {
+  bbox?: [number, number, number, number] | null
 }
 
 function isFormulaBlock(block: ResultBlock | undefined) {
@@ -46,35 +49,35 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
 
   const response = result?.response; const status = result?.status; const errorMessage = result?.error_message
   const metadata = response?.metadata
-  const totalPages = metadata?.total_pages ?? (result?.response?.layout || []).reduce((max: number, b: any) => Math.max(max, b.page_index ?? 1), 0)
+  const totalPages = metadata?.total_pages ?? (result?.response?.layout || []).reduce((max, block) => Math.max(max, block.page_index ?? 1), 0)
   const execSec = response?.execution_time ?? response?.result?.execution_time
   const processingMode = response?.processing_mode || metadata?.processing_mode || 'pipeline'
-  const layout = useMemo(() => result?.response?.layout || [], [result])
+  const layout = useMemo<ResultLayoutBlock[]>(() => result?.response?.layout || [], [result])
   const pageHeight = result?.response?.metadata?.height ?? 2339
   const images = useMemo(() => result?.response?.images || {}, [result?.response?.images])
 
   const formulas = useMemo<FormulaItem[]>(() => {
     const rf = result?.response?.formulas
     if (rf?.length) return rf
-    return layout.filter((b: any) => b.formula?.latex || String(b.layout_type || '').toLowerCase().includes('formula'))
-      .map((b: any, i: number) => ({
-        formula_id: b.formula_id || `f-p${b.page_index ?? 1}-b${b.block_id ?? i + 1}`,
-        task_id: result?.response?.task_id, block_id: b.block_id, page_index: b.page_index ?? 1,
-        bbox: b.bbox ?? null, layout_type: b.layout_type,
-        latex: b.formula?.latex || String(b.block_content || '').replace(/^\$\$|\\\[|\\\(|\$\$$|\\\]|\\\)$/g, '').trim(),
-        formula: b.formula
+    return layout.filter(block => block.formula?.latex || String(block.layout_type || '').toLowerCase().includes('formula'))
+      .map((block, index) => ({
+        formula_id: block.formula_id || `f-p${block.page_index ?? 1}-b${block.block_id ?? index + 1}`,
+        task_id: result?.response?.task_id, block_id: block.block_id, page_index: block.page_index ?? 1,
+        bbox: block.bbox ?? null, layout_type: block.layout_type,
+        latex: block.formula?.latex || String(block.block_content || '').replace(/^\$\$|\\\[|\\\(|\$\$$|\\\]|\\\)$/g, '').trim(),
+        formula: block.formula
       }))
   }, [layout, result?.response?.formulas, result?.response?.task_id])
 
   const blocks = useMemo<ResultBlock[]>(() => {
     if (result?.status !== 'completed') return []
-    return layout.filter((b: any) => b.block_content?.trim()).map((b: any, i: number) => {
-      const [x1, y1, x2, y2] = (b.bbox as [number, number, number, number]) || [0, 0, 0, 0]
+    return layout.filter(block => block.block_content?.trim()).map((block, index) => {
+      const [x1, y1, x2, y2] = block.bbox || [0, 0, 0, 0]
       return {
-        id: b.block_id ?? i, content: (b.block_content || '').trim(),
-        bbox: b.bbox ? [x1, y1, x2, y2] as [number, number, number, number] : null,
-        pageIndex: b.page_index ?? 1, isImage: (b.block_content || '').startsWith('!['),
-        layoutType: b.layout_type, formulaId: b.formula_id, latex: b.formula?.latex,
+        id: block.block_id ?? index, content: (block.block_content || '').trim(),
+        bbox: block.bbox ? [x1, y1, x2, y2] : null,
+        pageIndex: block.page_index ?? 1, isImage: (block.block_content || '').startsWith('!['),
+        layoutType: block.layout_type, formulaId: block.formula_id, latex: block.formula?.latex,
         width: x2 - x1, height: y2 - y1
       }
     })

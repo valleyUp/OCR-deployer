@@ -126,4 +126,21 @@ describe('useHistoryStore owner scoping', () => {
 		expect(addDeletedTaskIdsMock).toHaveBeenCalledWith(['task-a'], 'owner-a')
 		expect(deleteRecordMock).toHaveBeenCalledWith('local-a')
 	})
+
+	it('does not revive server records explicitly deleted by the active owner', async () => {
+		listRecordsMock.mockResolvedValue([])
+		getDeletedTaskIdsMock.mockReturnValue(new Set(['task-a']))
+		const { useHistoryStore } = await import('./useHistoryStore')
+
+		await useHistoryStore.getState().setOwner('owner-a')
+		await useHistoryStore.getState().mergeServerRecords([
+			{
+				...record('server-a', 'owner-a'),
+				taskId: 'task-a',
+			},
+		])
+
+		expect(putRecordMock).not.toHaveBeenCalled()
+		expect(useHistoryStore.getState().records).toEqual([])
+	})
 })

@@ -1,9 +1,9 @@
-// PdfViewerCanvasOnly.tsx
-import { ChevronLeft, ChevronRight, Eye, EyeOff, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
-import { Document, Page, pdfjs } from 'react-pdf';
+import { Document, pdfjs } from 'react-pdf';
 import { usePdfNavigation } from '@/hooks/usePdfNavigation';
 import { usePdfZoom } from '@/hooks/usePdfZoom';
+import { PdfPageItem, PdfPagePlaceholder } from './PdfPageItems';
+import { PdfToolbar } from './PdfToolbar';
 
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 // import 'react-pdf/dist/Page/TextLayer.css';
@@ -250,135 +250,25 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
     }, [scale, updateVisibleRange]);
 
 
-    // 渲染页面组件
-    const renderPage = (pageNumber: number) => {
-        const height = pageHeights[pageNumber] || VIRTUAL_CONFIG.PLACEHOLDER_HEIGHT;
-
-        return (
-            <div
-                key={`page_${pageNumber}`}
-                ref={(el) => {
-                    pageRefs.current[pageNumber - 1] = el;
-                    if (el) {
-                        // 页面渲染后更新高度
-                        setTimeout(() => handlePageRenderSuccess(pageNumber, el), 0);
-                    }
-                }}
-                className={`relative mb-6 mx-auto rounded-[16px] bg-white shadow-2xl shadow-black/5 ring-1 ring-[rgba(0,0,0,0.08)]`}
-                style={{ minHeight: numPages > 1 ? height * scale : 'auto', width: 'fit-content' }}
-                data-pdf-page={pageNumber}
-                data-pdf-visible
-                onClick={onPageClick ? (e) => onPageClick(e, pageNumber) : undefined}
-                onMouseMove={onPageMouseMove ? (e) => onPageMouseMove(e, pageNumber) : undefined}
-                onMouseLeave={onPageMouseLeave ? (e) => onPageMouseLeave(e, pageNumber) : undefined}
-            >
-                <Page
-                    pageNumber={pageNumber}
-                    scale={scale}
-                    renderTextLayer={false}
-                    renderAnnotationLayer={false}
-                    onRenderError={(error) => console.error(`Page ${pageNumber} render error:`, error)}
-                />
-                {renderPageOverlay ? renderPageOverlay(pageNumber) : null}
-            </div>
-        );
-    };
-
-    // 渲染占位符
-    const renderPlaceholder = (pageNumber: number) => {
-        const height = pageHeights[pageNumber] || VIRTUAL_CONFIG.PLACEHOLDER_HEIGHT;
-
-        return (
-            <div
-                key={`placeholder_${pageNumber}`}
-                data-pdf-page={pageNumber}
-                className={`relative w-full mb-6`}
-                style={{ minHeight: height * scale }}
-            >
-            </div>
-        );
-    };
-
     const [startPage, endPage] = visibleRange;
 
     return (
         <div className={`pdf-viewer flex flex-col h-full overflow-hidden ${className}`}>
-            {/* 工具栏：缩放 + 翻页 */}
-            {controlsVisible ? (
-                <div className="pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-4 rounded-full border border-[var(--line-2)] bg-white/85 px-4 py-2 shadow-lg backdrop-blur-xl transition-all hover:bg-white/95">
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={prevPage}
-                            disabled={currentPage <= 1}
-                            className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]"
-                        >
-                            <ChevronLeft size={18} strokeWidth={1.5} />
-                        </button>
-                        <div className="flex items-center gap-1.5">
-                            <input
-                                type="number"
-                                min={1}
-                                max={numPages}
-                                value={inputValue}
-                                onChange={(e) => {
-                                    setInputValue(e.target.value);
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.currentTarget.blur();
-                                    }
-                                }}
-                                className="h-7 w-12 rounded-md border border-[var(--line-2)] bg-white text-center text-[13px] font-medium shadow-sm focus:border-[var(--a)] focus:outline-none focus:ring-1 focus:ring-[var(--a-glow)]"
-                            />
-                            <span className="text-[13px] text-[var(--t-3)]">/ {numPages || '?'}</span>
-                        </div>
-                        <button
-                            onClick={nextPage}
-                            disabled={currentPage >= numPages}
-                            className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]"
-                        >
-                            <ChevronRight size={18} strokeWidth={1.5} />
-                        </button>
-                    </div>
-
-                    <div className="h-5 w-[1px] bg-[var(--line-2)]"></div>
-
-                    <div className="flex items-center gap-2">
-                        <button onClick={zoomOut} className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]">
-                            <ZoomOut size={16} strokeWidth={1.5} />
-                        </button>
-                        <span className="w-12 text-center text-[13px] tabular-nums text-[var(--t-2)]">{Math.round(scale * 100)}%</span>
-                        <button onClick={zoomIn} className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]">
-                            <ZoomIn size={16} strokeWidth={1.5} />
-                        </button>
-                        <button onClick={resetZoom} className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]">
-                            <RotateCcw size={16} strokeWidth={1.5} />
-                        </button>
-                    </div>
-
-                    <div className="h-5 w-[1px] bg-[var(--line-2)]"></div>
-
-                    <button
-                        type="button"
-                        onClick={() => setControlsVisible(false)}
-                        className="btn-icon size-8 cursor-pointer text-[#6F685D] hover:text-[#1D1D1F]"
-                        title="隐藏 PDF 控制条"
-                        aria-label="隐藏 PDF 控制条"
-                    >
-                        <EyeOff size={16} strokeWidth={1.5} />
-                    </button>
-                </div>
-            ) : (
-                <button
-                    type="button"
-                    onClick={() => setControlsVisible(true)}
-                    className="pointer-events-auto absolute bottom-6 left-1/2 z-20 flex size-10 -translate-x-1/2 items-center justify-center rounded-full border border-[var(--line-2)] bg-white/85 text-[#6F685D] shadow-lg backdrop-blur-xl transition-all hover:bg-white/95 hover:text-[#1D1D1F]"
-                    title="显示 PDF 控制条"
-                    aria-label="显示 PDF 控制条"
-                >
-                    <Eye size={17} strokeWidth={1.5} />
-                </button>
-            )}
+            <PdfToolbar
+                controlsVisible={controlsVisible}
+                currentPage={currentPage}
+                inputValue={inputValue}
+                numPages={numPages}
+                scale={scale}
+                onInputChange={setInputValue}
+                onHide={() => setControlsVisible(false)}
+                onShow={() => setControlsVisible(true)}
+                prevPage={prevPage}
+                nextPage={nextPage}
+                zoomOut={zoomOut}
+                zoomIn={zoomIn}
+                resetZoom={resetZoom}
+            />
 
             {/* 滚动容器 - 虚拟渲染 */}
             <div ref={scrollContainerRef} className="scrollbar-thin pdf-scroll-container relative flex-1 overflow-auto bg-[#F9F9F7]">
@@ -396,10 +286,32 @@ const PdfViewerCanvasOnly: React.FC<PdfViewerProps> = ({
                         >
                             {Array.from({ length: numPages }, (_, index) => {
                                 const pageNumber = index + 1;
+                                const height = pageHeights[pageNumber] || VIRTUAL_CONFIG.PLACEHOLDER_HEIGHT;
                                 if (pageNumber >= startPage && pageNumber <= endPage) {
-                                    return renderPage(pageNumber);
+                                    return (
+                                        <PdfPageItem
+                                            key={`page_${pageNumber}`}
+                                            pageNumber={pageNumber}
+                                            numPages={numPages}
+                                            height={height}
+                                            scale={scale}
+                                            pageRefs={pageRefs}
+                                            renderPageOverlay={renderPageOverlay}
+                                            onPageClick={onPageClick}
+                                            onPageMouseMove={onPageMouseMove}
+                                            onPageMouseLeave={onPageMouseLeave}
+                                            onPageRenderSuccess={handlePageRenderSuccess}
+                                        />
+                                    );
                                 }
-                                return renderPlaceholder(pageNumber);
+                                return (
+                                    <PdfPagePlaceholder
+                                        key={`placeholder_${pageNumber}`}
+                                        pageNumber={pageNumber}
+                                        height={height}
+                                        scale={scale}
+                                    />
+                                );
                             })}
                         </div>
                     )}

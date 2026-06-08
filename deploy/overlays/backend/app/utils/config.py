@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # 前端单文件上传上限（MB），通过 GET /api/v1/config 暴露给 UI
     MAX_UPLOAD_MB: int = 100
 
+    # Optional override for the OCR service URL supplied by upload requests.
+    # Disabled by default because a user-controlled URL can reach internal services.
+    ALLOW_CUSTOM_OCR_URLS: bool = False
+    CUSTOM_OCR_ALLOWED_HOSTS: str = ""
+
     # 匿名设备身份 cookie。只在数据库中保存 token 的 SHA-256 hash。
     OWNER_COOKIE_NAME: str = "ocr_owner_token"
     OWNER_COOKIE_MAX_AGE_DAYS: int = 365

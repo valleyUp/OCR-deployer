@@ -105,6 +105,8 @@ services:
       MAX_CONCURRENT_TASKS: ${MAX_CONCURRENT_TASKS:-5}
       LAYOUT_PAGE_PARALLELISM: ${LAYOUT_PAGE_PARALLELISM:-1}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+      ALLOW_CUSTOM_OCR_URLS: ${ALLOW_CUSTOM_OCR_URLS:-false}
+      CUSTOM_OCR_ALLOWED_HOSTS: ${CUSTOM_OCR_ALLOWED_HOSTS:-}
       OWNER_COOKIE_NAME: ${OWNER_COOKIE_NAME:-ocr_owner_token}
       OWNER_COOKIE_MAX_AGE_DAYS: ${OWNER_COOKIE_MAX_AGE_DAYS:-365}
       OWNER_COOKIE_SECURE: ${OWNER_COOKIE_SECURE:-false}
@@ -123,5 +125,7 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    environment:
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
     ports:
       - "${FRONTEND_HOST_PORT:-3000}:80"

@@ -29,7 +29,7 @@ RUN pdfjs_dist_dir="$(find node_modules -type d -path '*/pdfjs-dist' | head -n 1
 FROM nginx:stable-alpine AS production-stage
 
 COPY --from=build-stage /app/dist /usr/share/nginx/html
-COPY --from=build-stage /app/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build-stage /app/nginx.conf /etc/nginx/templates/default.conf.template
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD test -f /usr/share/nginx/html/index.html || exit 1

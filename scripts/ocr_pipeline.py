@@ -131,6 +131,7 @@ TEXT_PDF_MIN_CHARS = 100
 # Owner-cookie issued by the GLM-OCR backend (settings.OWNER_COOKIE_NAME).
 OWNER_COOKIE_NAME = "ocr_owner_token"
 
+
 LOG = logging.getLogger("ocr_pipeline")
 
 
@@ -283,26 +284,104 @@ class JobStore:
 
     # ── discovery / seeding ───────────────────────────────────────────────────
 
-    def seed_jobs(self, entries: Iterable[tuple[str, str]]) -> int:
-        """Insert (csv_row_id, file_path) pairs, ignoring duplicates.
+    def seed_jobs(
+        self,
+        entries: list[dict[str, Any]],
+        col_names: list[str] | None = None,
+        col_types: dict[str, str] | None = None,
+    ) -> int:
+        """Insert job entries and their CSV metadata, ignoring duplicates.
 
-        Returns the number of rows actually inserted (newly discovered files).
-        Existing rows are untouched so prior progress is preserved.
+        Creates the ``csv_data`` table (if needed) with typed columns derived
+        from *col_types*.  Returns the number of newly inserted rows.
         """
-        inserted = 0
-        rows = list(entries)
-        if not rows:
+        if not entries:
             return 0
-        with self._cursor() as cur:
-            cur.executemany(
-                "INSERT OR IGNORE INTO ocr_jobs (csv_row_id, file_path, status) "
-                "VALUES (?, ?, 'pending')",
-                rows,
+
+        col_names = col_names or []
+        col_types = col_types or {}
+
+        # -- create csv_data table on first run --------------------------------
+        if col_names:
+            col_defs = ", ".join(
+                f"{_quote_ident(c)} {col_types.get(c, 'TEXT')}"
+                for c in col_names
             )
-            inserted = cur.rowcount if cur.rowcount != -1 else 0
-        LOG.info("Seeded %d new job(s) (%d total unique paths)",
-                 inserted, len(rows))
+            ddl = (
+                "CREATE TABLE IF NOT EXISTS csv_data ("
+                "  job_id INTEGER PRIMARY KEY"
+                "    REFERENCES ocr_jobs(id) ON DELETE CASCADE,"
+                f"  {col_defs}"
+                ")"
+            )
+            with self._cursor() as cur:
+                cur.connection.execute(ddl)
+
+        # -- insert ocr_jobs ---------------------------------------------------
+        inserted = 0
+        with self._cursor() as cur:
+            conn = cur.connection
+            conn.execute("BEGIN")
+            try:
+                for entry in entries:
+                    cur.execute(
+                        "INSERT OR IGNORE INTO ocr_jobs "
+                        "(csv_row_id, file_path, status) VALUES (?, ?, 'pending')",
+                        (entry["csv_row_id"], entry["file_path"]),
+                    )
+                    if cur.rowcount < 1:
+                        continue
+                    inserted += 1
+                    job_id = cur.lastrowid
+
+                    if col_names and entry.get("csv_data"):
+                        placeholders = ", ".join("?" for _ in col_names)
+                        cols_sql = ", ".join(_quote_ident(c) for c in col_names)
+                        values = self._coerce_row(
+                            entry["csv_data"], col_names, col_types
+                        )
+                        cur.execute(
+                            f"INSERT OR IGNORE INTO csv_data "
+                            f"(job_id, {cols_sql}) VALUES (?, {placeholders})",
+                            [job_id, *values],
+                        )
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+
+        LOG.info("Seeded %d new job(s) (%d total unique paths, %d csv columns)",
+                 inserted, len(entries), len(col_names))
         return inserted
+
+    @staticmethod
+    def _coerce_row(
+        csv_data: dict[str, str],
+        col_names: list[str],
+        col_types: dict[str, str],
+    ) -> list[Any]:
+        """Convert raw CSV strings to typed Python values matching *col_types*."""
+        values: list[Any] = []
+        for c in col_names:
+            raw = csv_data.get(c, "")
+            if not raw or not raw.strip():
+                values.append(None)
+                continue
+            raw = raw.strip()
+            ctype = col_types.get(c, "TEXT")
+            if ctype == "INTEGER":
+                try:
+                    values.append(int(raw))
+                except ValueError:
+                    values.append(raw)
+            elif ctype == "REAL":
+                try:
+                    values.append(float(raw))
+                except ValueError:
+                    values.append(raw)
+            else:
+                values.append(raw)
+        return values
 
     def reset_orphans(self) -> int:
         """Reset ``processing`` jobs left by a crashed run back to ``pending``."""
@@ -429,6 +508,37 @@ class JobStore:
             )
             return {row["status"]: row["n"] for row in cur.fetchall()}
 
+    def get_csv_data(self, job_id: int) -> dict[str, Any] | None:
+        """Return the CSV metadata row for *job_id*, or ``None`` if absent."""
+        with self._cursor() as cur:
+            # Check csv_data table exists before querying
+            tables = cur.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='csv_data'"
+            ).fetchone()
+            if not tables:
+                return None
+            row = cur.execute(
+                "SELECT * FROM csv_data WHERE job_id=?", (job_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def csv_columns(self) -> list[dict[str, str]]:
+        """Return column metadata for the ``csv_data`` table (name + type)."""
+        with self._cursor() as cur:
+            tables = cur.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='csv_data'"
+            ).fetchone()
+            if not tables:
+                return []
+            rows = cur.execute("PRAGMA table_info(csv_data)").fetchall()
+            return [
+                {"name": r["name"], "type": r["type"]}
+                for r in rows
+                if r["name"] != "job_id"
+            ]
+
     def close_thread(self) -> None:
         """Close the calling thread's connection (called from worker exit)."""
         conn = getattr(self._tls, "conn", None)
@@ -463,13 +573,82 @@ def _iter_csv_rows(csv_path: Path) -> Iterator[dict[str, str]]:
         yield from csv.DictReader(handle)
 
 
-def discover_files(csv_path: Path) -> list[tuple[str, str]]:
-    """Expand the CSV into ``(csv_row_id, absolute_file_path)`` pairs.
+def _detect_column_types(
+    rows: list[dict[str, str]],
+    skip_cols: set[str],
+) -> dict[str, str]:
+    """Analyse CSV values and classify each column as ``INTEGER``, ``REAL``, or ``TEXT``.
 
-    Each row's ``file_path`` may be either a directory (recursively scanned
-    for supported extensions) or a single supported file.  ``csv_row_id``
-    comes from an ``id``-like column when present, otherwise the 1-based CSV
-    line number.
+    Columns in *skip_cols* (``file_path``, ``id``, etc.) are excluded from the
+    result since they are stored in dedicated ``ocr_jobs`` columns.
+
+    Type detection logic per column:
+      * All non-empty values parse as ``int``   → ``INTEGER``
+      * All non-empty values parse as ``float`` → ``REAL`` (covers monetary amounts)
+      * Otherwise                               → ``TEXT``
+    """
+    if not rows:
+        return {}
+
+    cols = [c for c in rows[0] if c and c not in skip_cols]
+    types: dict[str, str] = {}
+
+    for col in cols:
+        is_int = True
+        is_float = True
+        has_value = False
+
+        for row in rows:
+            val = (row.get(col) or "").strip()
+            if not val:
+                continue
+            has_value = True
+            if is_int:
+                try:
+                    int(val)
+                except ValueError:
+                    is_int = False
+            if is_float:
+                try:
+                    float(val)
+                except ValueError:
+                    is_float = False
+            if not is_int and not is_float:
+                break
+
+        if not has_value:
+            types[col] = "TEXT"
+        elif is_int:
+            types[col] = "INTEGER"
+        elif is_float:
+            types[col] = "REAL"
+        else:
+            types[col] = "TEXT"
+
+    return types
+
+
+def _quote_ident(name: str) -> str:
+    """Double-quote a SQL identifier, escaping embedded quotes."""
+    return '"' + name.replace('"', '""') + '"'
+
+
+def discover_files(
+    csv_path: Path,
+) -> tuple[list[dict[str, Any]], list[str], dict[str, str]]:
+    """Expand the CSV into job entries, detecting column types.
+
+    Returns ``(entries, col_names, col_types)`` where:
+
+    * *entries* is a list of dicts with ``csv_row_id``, ``file_path``, and
+      ``csv_data`` (all non-path/id CSV columns for that row).
+    * *col_names* preserves the original CSV column order (excluding skipped
+      columns).
+    * *col_types* maps each extra column to its detected SQLite type
+      (``INTEGER``, ``REAL``, or ``TEXT``).
+
+    When a row's ``file_path`` is a directory every discovered file inherits
+    the same CSV metadata from the originating row.
     """
     rows_iter = _iter_csv_rows(csv_path)
     first = next(rows_iter, None)
@@ -479,18 +658,27 @@ def discover_files(csv_path: Path) -> list[tuple[str, str]]:
     fieldnames = list(first.keys())
     path_col = _pick_path_column(fieldnames)
     id_col = _pick_id_column(fieldnames)
+    skip_cols = {c for c in (path_col, id_col) if c}
 
-    entries: list[tuple[str, str]] = []
+    all_rows = [first, *rows_iter]
+    col_types = _detect_column_types(all_rows, skip_cols)
+    col_names = [c for c in fieldnames if c and c not in skip_cols]
+
+    entries: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    def _add(row_id: str, abs_path: str) -> None:
+    def _add(row_id: str, abs_path: str, csv_data: dict[str, str]) -> None:
         if abs_path in seen:
             return
         seen.add(abs_path)
-        entries.append((row_id, abs_path))
+        entries.append({
+            "csv_row_id": row_id,
+            "file_path": abs_path,
+            "csv_data": csv_data,
+        })
 
     line_no = 1  # header is line 1; first data row is line 2
-    for row in [first, *rows_iter]:
+    for row in all_rows:
         line_no += 1
         row_id = (row.get(id_col) or "").strip() or f"line-{line_no}"
         raw = (row.get(path_col) or "").strip()
@@ -503,9 +691,11 @@ def discover_files(csv_path: Path) -> list[tuple[str, str]]:
             LOG.warning("CSV 第 %d 行路径不存在: %s", line_no, raw)
             continue
 
+        csv_data = {c: (row.get(c) or "") for c in col_names}
+
         if target.is_file():
             if target.suffix.lower() in SUPPORTED_EXTS:
-                _add(row_id, str(target.resolve()))
+                _add(row_id, str(target.resolve()), csv_data)
             else:
                 LOG.warning("CSV 第 %d 行文件扩展名不支持: %s", line_no, raw)
             continue
@@ -514,9 +704,9 @@ def discover_files(csv_path: Path) -> list[tuple[str, str]]:
         for root, _dirs, files in os.walk(target):
             for name in sorted(files):
                 if Path(name).suffix.lower() in SUPPORTED_EXTS:
-                    _add(row_id, str(Path(root, name).resolve()))
+                    _add(row_id, str(Path(root, name).resolve()), csv_data)
 
-    return entries
+    return entries, col_names, col_types
 
 
 # ─── text-PDF detection & extraction ──────────────────────────────────────────
@@ -977,7 +1167,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # 1. discover + seed
     try:
-        entries = discover_files(args.csv)
+        entries, col_names, col_types = discover_files(args.csv)
     except SystemExit:
         raise
     except Exception as exc:
@@ -988,12 +1178,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 0
 
     store = JobStore(args.db)
-    store.seed_jobs(entries)
+    store.seed_jobs(entries, col_names, col_types)
     store.reset_orphans()
 
     if args.dry_run:
         LOG.info("[dry-run] 共 %d 个文件已登记，跳过处理。", len(entries))
-        print(json_dry_run_summary(store.stats(), len(entries)))
+        print(json_dry_run_summary(store.stats(), len(entries), col_types))
         return 0
 
     # 2. fetch pending + shard across workers
@@ -1076,13 +1266,19 @@ def print_summary(stats: dict[str, int]) -> None:
     print(f"\n汇总: {total} 个文件 — {', '.join(parts)}")
 
 
-def json_dry_run_summary(stats: dict[str, int], discovered: int) -> str:
+def json_dry_run_summary(
+    stats: dict[str, int],
+    discovered: int,
+    col_types: dict[str, str] | None = None,
+) -> str:
     import json
-    return json.dumps(
-        {"discovered": discovered, "jobs_by_status": stats},
-        ensure_ascii=False,
-        indent=2,
-    )
+    result: dict[str, Any] = {
+        "discovered": discovered,
+        "jobs_by_status": stats,
+    }
+    if col_types:
+        result["csv_columns"] = col_types
+    return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":

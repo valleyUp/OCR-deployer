@@ -1,0 +1,11 @@
+# Dependencies for scripts/ocr_pipeline.py
+# Install with:  pip install -r scripts/requirements.txt
+#
+# The script imports PyMuPDF / tqdm / requests lazily and prints a helpful
+# error message if any of them are missing, so a partial install degrades
+# gracefully rather than crashing at import time.
+
+PyMuPDF>=1.23.0          # text-PDF detection (fitz) and page counting
+tqdm>=4.65.0             # progress bar
+requests>=2.28.0         # OCR backend HTTP client
+python-dotenv>=1.0.0     # optional .env loading (falls back to built-in parser)

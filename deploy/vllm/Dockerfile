@@ -1,1 +1,1 @@
-FROM vllm/vllm-openai:latest-ubuntu2404
+FROM vllm/vllm-openai:v0.23.0-ubuntu2404

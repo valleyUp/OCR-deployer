@@ -4,7 +4,8 @@ Batch OCR pipeline: CSV → file scan → text-PDF / OCR-API routing → SQLite 
 
 Workflow
 --------
-1. Read a CSV whose ``file_path`` column points at one or more directories.
+1. Read a CSV whose ``file_path`` column points at one or more directories,
+   or use ``--retry-db`` to retry pending/failed jobs from an existing DB.
 2. Recursively scan each directory for supported files
    (``.pdf .jpg .jpeg .png .tiff .tif .bmp .webp``).
 3. For every file:
@@ -28,7 +29,9 @@ All discovered files are ``INSERT OR IGNORE``-ed into ``ocr_jobs`` with
 ``status='pending'`` at startup.  Each run picks up
 ``status IN ('pending','failed') AND retry_count < max_retries`` rows, flips
 them to ``'processing'`` (atomic claim), then to ``'done'`` or ``'failed'``.
-Re-running the script therefore continues where it stopped.
+Re-running the script therefore continues where it stopped.  Use
+``--retry-db <path>`` when a CSV is not needed and you want to retry every
+``pending`` / ``failed`` job already recorded in that database.
 
 Dependencies: PyMuPDF, tqdm, requests, python-dotenv  (see scripts/requirements.txt).
 """
@@ -274,6 +277,22 @@ class JobStore:
         if "task_id" not in cols:
             conn.execute("ALTER TABLE ocr_jobs ADD COLUMN task_id TEXT")
 
+        csv_table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='csv_data'"
+        ).fetchone()
+        if not csv_table:
+            return
+        csv_cols = {row[1] for row in conn.execute("PRAGMA table_info(csv_data)")}
+        if "file_path" not in csv_cols:
+            conn.execute("ALTER TABLE csv_data ADD COLUMN file_path TEXT")
+            conn.execute(
+                "UPDATE csv_data "
+                "SET file_path=(SELECT ocr_jobs.file_path "
+                "               FROM ocr_jobs "
+                "               WHERE ocr_jobs.id=csv_data.job_id) "
+                "WHERE file_path IS NULL"
+            )
+
     @contextmanager
     def _cursor(self) -> Iterator[sqlite3.Cursor]:
         conn = getattr(self._tls, "conn", None)
@@ -316,6 +335,7 @@ class JobStore:
             )
             with self._cursor() as cur:
                 cur.connection.execute(ddl)
+                self._ensure_csv_data_columns(cur.connection, col_names, col_types)
 
         # -- insert ocr_jobs ---------------------------------------------------
         inserted = 0
@@ -329,10 +349,17 @@ class JobStore:
                         "(csv_row_id, file_path, status) VALUES (?, ?, 'pending')",
                         (entry["csv_row_id"], entry["file_path"]),
                     )
-                    if cur.rowcount < 1:
-                        continue
-                    inserted += 1
-                    job_id = cur.lastrowid
+                    if cur.rowcount == 1:
+                        inserted += 1
+                        job_id = cur.lastrowid
+                    else:
+                        row = cur.execute(
+                            "SELECT id FROM ocr_jobs WHERE file_path=?",
+                            (entry["file_path"],),
+                        ).fetchone()
+                        if not row:
+                            continue
+                        job_id = row["id"]
 
                     if col_names and entry.get("csv_data"):
                         placeholders = ", ".join("?" for _ in col_names)
@@ -345,6 +372,14 @@ class JobStore:
                             f"(job_id, {cols_sql}) VALUES (?, {placeholders})",
                             [job_id, *values],
                         )
+                        if "file_path" in col_names:
+                            cur.execute(
+                                "UPDATE csv_data "
+                                "SET file_path=? "
+                                "WHERE job_id=? AND "
+                                "      (file_path IS NULL OR file_path='')",
+                                (entry["csv_data"].get("file_path", ""), job_id),
+                            )
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
@@ -353,6 +388,25 @@ class JobStore:
         LOG.info("Seeded %d new job(s) (%d total unique paths, %d csv columns)",
                  inserted, len(entries), len(col_names))
         return inserted
+
+    @staticmethod
+    def _ensure_csv_data_columns(
+        conn: sqlite3.Connection,
+        col_names: list[str],
+        col_types: dict[str, str],
+    ) -> None:
+        """Add newly discovered CSV columns to an existing ``csv_data`` table."""
+        existing = {
+            row[1] for row in conn.execute("PRAGMA table_info(csv_data)")
+        }
+        for name in col_names:
+            if name in existing:
+                continue
+            ctype = col_types.get(name, "TEXT")
+            conn.execute(
+                f"ALTER TABLE csv_data ADD COLUMN {_quote_ident(name)} {ctype}"
+            )
+            existing.add(name)
 
     @staticmethod
     def _coerce_row(
@@ -406,11 +460,18 @@ class JobStore:
 
     # ── claim / fetch ─────────────────────────────────────────────────────────
 
-    def fetch_pending(self, max_retries: int, limit: int = 0) -> list[OcrJob]:
+    def fetch_pending(
+        self,
+        max_retries: int,
+        limit: int = 0,
+        *,
+        ignore_retry_budget: bool = False,
+    ) -> list[OcrJob]:
         """Return jobs eligible for processing this run.
 
         Eligible = ``status IN ('pending','failed')`` and the file-level
-        retry budget is not exhausted (``retry_count < max_retries``).
+        retry budget is not exhausted (``retry_count < max_retries``), unless
+        *ignore_retry_budget* is true.
         """
         sql = (
             "SELECT id, csv_row_id, file_path, status, "
@@ -418,16 +479,43 @@ class JobStore:
             "       COALESCE(task_id, '') AS task_id "
             "FROM ocr_jobs "
             "WHERE status IN ('pending', 'failed') "
-            "  AND retry_count < ? "
-            "ORDER BY id"
         )
-        params: list[Any] = [max_retries]
+        params: list[Any] = []
+        if not ignore_retry_budget:
+            sql += "  AND retry_count < ? "
+            params.append(max_retries)
+        sql += "ORDER BY id"
         if limit and limit > 0:
             sql += " LIMIT ?"
             params.append(limit)
         with self._cursor() as cur:
             cur.execute(sql, params)
             return [OcrJob(**row) for row in cur.fetchall()]
+
+    def prepare_pending_failed_retry(self) -> int:
+        """Reset pending/failed jobs so they can be retried from this DB.
+
+        Failed jobs may carry a terminal backend ``task_id``.  Clearing it
+        forces a fresh upload instead of polling the same failed task forever.
+        Pending jobs are also cleared so an explicit retry run is deterministic.
+        """
+        with self._cursor() as cur:
+            conn = cur.connection
+            conn.execute("BEGIN")
+            try:
+                cur.execute(
+                    "UPDATE ocr_jobs "
+                    "SET status='pending', retry_count=0, error_msg=NULL, "
+                    "    task_id=NULL, updated_at=CURRENT_TIMESTAMP "
+                    "WHERE status IN ('pending', 'failed')"
+                )
+                count = cur.rowcount if cur.rowcount != -1 else 0
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+        LOG.info("已准备重试 %d 个 pending/failed job", count)
+        return count
 
     def claim(self, job_id: int, process_type: str) -> bool:
         """Atomically flip a job to ``processing``.
@@ -579,8 +667,10 @@ def _detect_column_types(
 ) -> dict[str, str]:
     """Analyse CSV values and classify each column as ``INTEGER``, ``REAL``, or ``TEXT``.
 
-    Columns in *skip_cols* (``file_path``, ``id``, etc.) are excluded from the
-    result since they are stored in dedicated ``ocr_jobs`` columns.
+    Columns in *skip_cols* (``id`` / row identifiers, etc.) are excluded from
+    the result.  The CSV path column is intentionally kept in ``csv_data`` so
+    the source row remains inspectable even though the discovered file path is
+    also stored in ``ocr_jobs``.
 
     Type detection logic per column:
       * All non-empty values parse as ``int``   → ``INTEGER``
@@ -640,15 +730,16 @@ def discover_files(
 
     Returns ``(entries, col_names, col_types)`` where:
 
-    * *entries* is a list of dicts with ``csv_row_id``, ``file_path``, and
-      ``csv_data`` (all non-path/id CSV columns for that row).
-    * *col_names* preserves the original CSV column order (excluding skipped
-      columns).
+    * *entries* is a list of dicts with ``csv_row_id``, the discovered
+      ``file_path``, and ``csv_data`` (CSV metadata for that row).
+    * *col_names* preserves the original CSV column order (excluding the row id
+      column) and always includes a normalized ``file_path`` column.
     * *col_types* maps each extra column to its detected SQLite type
       (``INTEGER``, ``REAL``, or ``TEXT``).
 
     When a row's ``file_path`` is a directory every discovered file inherits
-    the same CSV metadata from the originating row.
+    the same CSV metadata from the originating row, including the original
+    CSV path value in ``csv_data.file_path``.
     """
     rows_iter = _iter_csv_rows(csv_path)
     first = next(rows_iter, None)
@@ -658,11 +749,16 @@ def discover_files(
     fieldnames = list(first.keys())
     path_col = _pick_path_column(fieldnames)
     id_col = _pick_id_column(fieldnames)
-    skip_cols = {c for c in (path_col, id_col) if c}
+    skip_cols = {c for c in (id_col,) if c}
 
     all_rows = [first, *rows_iter]
     col_types = _detect_column_types(all_rows, skip_cols)
+    col_types[path_col] = "TEXT"
+    col_types["file_path"] = "TEXT"
+
     col_names = [c for c in fieldnames if c and c not in skip_cols]
+    if "file_path" not in col_names:
+        col_names.insert(0, "file_path")
 
     entries: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -692,6 +788,7 @@ def discover_files(
             continue
 
         csv_data = {c: (row.get(c) or "") for c in col_names}
+        csv_data["file_path"] = raw
 
         if target.is_file():
             if target.suffix.lower() in SUPPORTED_EXTS:
@@ -1087,10 +1184,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--csv", required=True, type=Path,
+    parser.add_argument("--csv", type=Path,
                         help="输入 CSV，file_path 列指向目录或文件")
     parser.add_argument("--db", default=DEFAULT_DB_PATH, type=Path,
                         help="SQLite 数据库路径")
+    parser.add_argument("--retry-db", type=Path,
+                        help="直接从指定 SQLite 数据库重试所有 pending/failed 任务（无需 --csv）")
+    parser.add_argument("--retry-existing", action="store_true",
+                        help="跳过 CSV 扫描，重试 --db 中所有 pending/failed 任务")
     parser.add_argument("--workers", type=int, default=4,
                         help="并发线程数")
     parser.add_argument("--max-retries", type=int, default=3,
@@ -1122,7 +1223,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=0,
                         help="本次最多处理的 job 数量（0=不限制，便于调试）")
     parser.add_argument("--dry-run", action="store_true",
-                        help="只扫描 CSV 与建库，不调用 OCR / pdftotext")
+                        help="只准备/登记任务，不调用 OCR / pdftotext")
     return parser
 
 
@@ -1146,6 +1247,9 @@ def shard(items: list[OcrJob], n: int) -> list[list[OcrJob]]:
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = build_arg_parser().parse_args(argv)
+    retry_existing = bool(args.retry_existing or args.retry_db)
+    if args.retry_db:
+        args.db = args.retry_db
 
     load_dotenv_if_present(resolve_env_file(args.env_file))
     setup_logging(args.log_dir / "ocr_pipeline.log", level=args.log_level)
@@ -1158,36 +1262,60 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
 
     LOG.info("==== OCR Pipeline 启动 %s ====", _utc_now_iso())
-    LOG.info("CSV=%s  DB=%s  workers=%d  ocr_api=%s  max_retries=%d",
+    LOG.info("mode=%s  CSV=%s  DB=%s  workers=%d  ocr_api=%s  max_retries=%d",
+             "retry-db" if retry_existing else "csv",
              args.csv, args.db, args.workers, base_url, args.max_retries)
 
-    if not args.csv.exists():
+    if retry_existing and not args.db.exists():
+        LOG.error("重试数据库不存在: %s", args.db)
+        return 2
+    if not retry_existing and not args.csv:
+        LOG.error("缺少 --csv；如需从已有数据库重试，请使用 --retry-db <db> 或 --retry-existing --db <db>")
+        return 2
+    if not retry_existing and not args.csv.exists():
         LOG.error("CSV 文件不存在: %s", args.csv)
         return 2
 
-    # 1. discover + seed
-    try:
-        entries, col_names, col_types = discover_files(args.csv)
-    except SystemExit:
-        raise
-    except Exception as exc:
-        LOG.error("扫描 CSV 失败: %s", exc)
-        return 2
-    if not entries:
-        LOG.warning("CSV 未发现任何可处理文件，退出。")
-        return 0
-
     store = JobStore(args.db)
-    store.seed_jobs(entries, col_names, col_types)
-    store.reset_orphans()
+    discovered = 0
+    col_types: dict[str, str] = {}
+
+    if retry_existing:
+        store.reset_orphans()
+        prepared = store.prepare_pending_failed_retry()
+        if prepared == 0:
+            LOG.info("指定数据库中没有 pending/failed 任务。")
+    else:
+        # 1. discover + seed
+        try:
+            entries, col_names, col_types = discover_files(args.csv)
+        except SystemExit:
+            raise
+        except Exception as exc:
+            LOG.error("扫描 CSV 失败: %s", exc)
+            return 2
+        if not entries:
+            LOG.warning("CSV 未发现任何可处理文件，退出。")
+            return 0
+
+        discovered = len(entries)
+        store.seed_jobs(entries, col_names, col_types)
+        store.reset_orphans()
 
     if args.dry_run:
-        LOG.info("[dry-run] 共 %d 个文件已登记，跳过处理。", len(entries))
-        print(json_dry_run_summary(store.stats(), len(entries), col_types))
+        if retry_existing:
+            LOG.info("[dry-run] 已准备指定数据库中的 pending/failed 任务，跳过处理。")
+        else:
+            LOG.info("[dry-run] 共 %d 个文件已登记，跳过处理。", discovered)
+        print(json_dry_run_summary(store.stats(), discovered, col_types))
         return 0
 
     # 2. fetch pending + shard across workers
-    pending = store.fetch_pending(args.max_retries, limit=args.limit)
+    pending = store.fetch_pending(
+        args.max_retries,
+        limit=args.limit,
+        ignore_retry_budget=retry_existing,
+    )
     if not pending:
         LOG.info("没有待处理任务（全部已完成或重试预算耗尽）。")
         print_summary(store.stats())

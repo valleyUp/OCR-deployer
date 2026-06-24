@@ -39,6 +39,7 @@ Dependencies: PyMuPDF, tqdm, requests, python-dotenv  (see scripts/requirements.
 from __future__ import annotations
 
 import argparse
+import shutil
 import csv
 import logging
 import os
@@ -48,6 +49,7 @@ import sys
 import threading
 import time
 from contextlib import closing, contextmanager
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -130,6 +132,8 @@ DEFAULT_PRIORITY = 2
 # Text-PDF heuristic thresholds (see is_text_pdf docstring).
 TEXT_PDF_PROBE_PAGES = 3
 TEXT_PDF_MIN_CHARS = 100
+DEFAULT_PDF_RENDER_DPI = 200
+DEFAULT_PDF_RENDER_WORKERS = 4
 
 # Owner-cookie issued by the GLM-OCR backend (settings.OWNER_COOKIE_NAME).
 OWNER_COOKIE_NAME = "ocr_owner_token"
@@ -159,6 +163,16 @@ class PageResult:
 
     page_number: int
     content: str
+
+
+@dataclass(frozen=True)
+class RenderedPdfPage:
+    """A locally rendered PDF page image ready for OCR upload."""
+
+    page_number: int
+    image_path: str
+    width: int
+    height: int
 
 
 # ─── logging ──────────────────────────────────────────────────────────────────
@@ -878,6 +892,84 @@ def process_text_pdf(path: str) -> list[PageResult]:
     return results
 
 
+def _render_pdf_page(
+    pdf_path: str,
+    output_dir: Path,
+    page_number: int,
+    dpi: int,
+) -> RenderedPdfPage:
+    """Render one PDF page to PNG without resizing it to another page."""
+    fitz = require_fitz()
+    zoom = dpi / 72.0
+    output_path = output_dir / f"page_{page_number:04d}.png"
+
+    with fitz.open(pdf_path) as doc:  # type: ignore[attr-defined]
+        page = doc[page_number - 1]
+        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        pix.save(str(output_path))
+        return RenderedPdfPage(
+            page_number=page_number,
+            image_path=str(output_path),
+            width=int(pix.width),
+            height=int(pix.height),
+        )
+
+
+def render_pdf_pages_locally(
+    pdf_path: str,
+    output_dir: Path,
+    *,
+    dpi: int = DEFAULT_PDF_RENDER_DPI,
+    workers: int = DEFAULT_PDF_RENDER_WORKERS,
+) -> list[RenderedPdfPage]:
+    """Render all PDF pages locally in parallel.
+
+    This intentionally does not normalize page sizes.  The current backend
+    resizes pages because it records only the first page's dimensions for bbox
+    conversion; local rendering should preserve each page's own dimensions so a
+    later page-aware result schema can store exact geometry.
+    """
+    page_count = _pdf_page_count(pdf_path)
+    if page_count < 1:
+        raise RuntimeError(f"PDF 无有效页: {pdf_path}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    worker_count = max(1, min(int(workers), page_count))
+    safe_dpi = max(36, int(dpi))
+
+    LOG.info(
+        "本地渲染 PDF: %s (%d 页, dpi=%d, workers=%d)",
+        pdf_path,
+        page_count,
+        safe_dpi,
+        worker_count,
+    )
+
+    if worker_count == 1:
+        pages = [
+            _render_pdf_page(pdf_path, output_dir, page, safe_dpi)
+            for page in range(1, page_count + 1)
+        ]
+    else:
+        pages = []
+        with ThreadPoolExecutor(max_workers=worker_count) as pool:
+            futures = {
+                pool.submit(_render_pdf_page, pdf_path, output_dir, page, safe_dpi):
+                page
+                for page in range(1, page_count + 1)
+            }
+            for future in as_completed(futures):
+                page = futures[future]
+                try:
+                    pages.append(future.result())
+                except Exception as exc:
+                    raise RuntimeError(f"本地渲染 PDF 第 {page} 页失败: {exc}") from exc
+        pages.sort(key=lambda item: item.page_number)
+
+    LOG.info("本地 PDF 渲染完成: %d 页 -> %s", len(pages), output_dir)
+    return pages
+
+
 # ─── OCR backend client ───────────────────────────────────────────────────────
 
 class OCRApiClient:
@@ -1103,6 +1195,34 @@ class OCRApiClient:
         return results
 
 
+def process_rendered_pdf_pages(
+    client: OCRApiClient,
+    pages: list[RenderedPdfPage],
+    source_pdf: str,
+) -> list[PageResult]:
+    """OCR locally rendered PDF pages one by one and map them to source pages."""
+    results: list[PageResult] = []
+    total = len(pages)
+    for rendered in pages:
+        task_id = client.upload(rendered.image_path)
+        LOG.info(
+            "[local_pdf_pages] 已提交 %s 第 %d/%d 页 (%dx%d) → task_id=%s",
+            Path(source_pdf).name,
+            rendered.page_number,
+            total,
+            rendered.width,
+            rendered.height,
+            task_id,
+        )
+        data = client.poll(task_id)
+        page_results = client._split_into_pages(data, rendered.image_path)
+        content = "\n\n".join(
+            page.content for page in page_results if page.content
+        ).strip()
+        results.append(PageResult(rendered.page_number, content))
+    return results
+
+
 # ─── worker ───────────────────────────────────────────────────────────────────
 
 def process_one(
@@ -1110,18 +1230,30 @@ def process_one(
     store: JobStore,
     client: OCRApiClient,
     force_ocr: bool = False,
+    local_pdf_pages: bool = False,
+    pdf_render_dir: Optional[Path] = None,
+    pdf_render_dpi: int = DEFAULT_PDF_RENDER_DPI,
+    pdf_render_workers: int = DEFAULT_PDF_RENDER_WORKERS,
+    keep_rendered_pages: bool = False,
 ) -> tuple[str, str]:
     """Process a single job, updating the store. Returns ``(status, detail)``.
 
     Routing:
       * non-PDF files              → OCR API
       * PDF with ``not force_ocr`` and ``is_text_pdf`` True → pdftotext
+      * PDF with ``local_pdf_pages`` enabled → local render pages, then OCR API
       * PDF otherwise              → OCR API
     """
     path = job.file_path
     is_pdf = path.lower().endswith(".pdf")
     use_pdftotext = is_pdf and not force_ocr and is_text_pdf(path)
-    process_type = "pdftotext" if use_pdftotext else "ocr_api"
+    use_local_pdf_pages = is_pdf and not use_pdftotext and local_pdf_pages
+    if use_pdftotext:
+        process_type = "pdftotext"
+    elif use_local_pdf_pages:
+        process_type = "local_pdf_pages"
+    else:
+        process_type = "ocr_api"
 
     if not store.claim(job.id, process_type):
         # Another worker beat us to it (or status changed) — skip.
@@ -1129,9 +1261,28 @@ def process_one(
 
     LOG.info("[%s] 处理 %s (%s)", process_type, path, job.csv_row_id)
 
+    render_dir_for_cleanup: Optional[Path] = None
     try:
         if use_pdftotext:
             results = process_text_pdf(path)
+        elif use_local_pdf_pages:
+            if pdf_render_dir is None:
+                raise RuntimeError("未配置本地 PDF 渲染目录")
+            safe_stem = "".join(
+                ch if ch.isalnum() or ch in ("-", "_") else "_"
+                for ch in Path(path).stem
+            )[:80] or "pdf"
+            render_dir = pdf_render_dir / f"job_{job.id}_{safe_stem}"
+            if render_dir.exists():
+                shutil.rmtree(render_dir, ignore_errors=True)
+            render_dir_for_cleanup = render_dir
+            rendered_pages = render_pdf_pages_locally(
+                path,
+                render_dir,
+                dpi=pdf_render_dpi,
+                workers=pdf_render_workers,
+            )
+            results = process_rendered_pdf_pages(client, rendered_pages, path)
         else:
             # OCR API: support crash recovery via persisted task_id
             if job.task_id:
@@ -1147,6 +1298,9 @@ def process_one(
         store.mark_failed(job.id, str(exc))
         LOG.error("[%s] 失败 %s: %s", process_type, path, exc)
         return "failed", str(exc)
+    finally:
+        if render_dir_for_cleanup is not None and not keep_rendered_pages:
+            shutil.rmtree(render_dir_for_cleanup, ignore_errors=True)
 
     store.mark_done(job.id, results)
     LOG.info("[%s] 完成 %s: %d 页", process_type, path, len(results))
@@ -1158,12 +1312,27 @@ def worker(
     store: JobStore,
     client: OCRApiClient,
     force_ocr: bool,
+    local_pdf_pages: bool,
+    pdf_render_dir: Optional[Path],
+    pdf_render_dpi: int,
+    pdf_render_workers: int,
+    keep_rendered_pages: bool,
     progress_cb: Any,
 ) -> None:
     """Process *jobs* sequentially on the calling thread."""
     try:
         for job in jobs:
-            process_one(job, store, client, force_ocr=force_ocr)
+            process_one(
+                job,
+                store,
+                client,
+                force_ocr=force_ocr,
+                local_pdf_pages=local_pdf_pages,
+                pdf_render_dir=pdf_render_dir,
+                pdf_render_dpi=pdf_render_dpi,
+                pdf_render_workers=pdf_render_workers,
+                keep_rendered_pages=keep_rendered_pages,
+            )
             progress_cb()
     finally:
         store.close_thread()
@@ -1214,6 +1383,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="HTTP 单请求超时（秒）")
     parser.add_argument("--force-ocr", action="store_true",
                         help="强制所有 PDF 走 OCR API（跳过文本 PDF 检测）")
+    parser.add_argument("--local-pdf-pages", action="store_true",
+                        help="非文本 PDF 先在本地并行渲染为单页图片，再逐页上传 OCR")
+    parser.add_argument("--pdf-render-dir", type=Path, default=None,
+                        help="本地 PDF 单页图片缓存目录（默认 <db目录>/ocr_pdf_pages）")
+    parser.add_argument("--pdf-render-dpi", type=int, default=DEFAULT_PDF_RENDER_DPI,
+                        help="本地 PDF 渲染 DPI")
+    parser.add_argument("--pdf-render-workers", type=int,
+                        default=DEFAULT_PDF_RENDER_WORKERS,
+                        help="每个 PDF 本地渲染并发线程数")
+    parser.add_argument("--keep-rendered-pages", action="store_true",
+                        help="保留本地渲染出的单页图片，便于调试或复查")
     parser.add_argument("--log-dir", default=DEFAULT_LOG_DIR, type=Path,
                         help=f"日志目录（文件名固定 ocr_pipeline.log）")
     parser.add_argument("--log-level", default="INFO",
@@ -1265,6 +1445,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     LOG.info("mode=%s  CSV=%s  DB=%s  workers=%d  ocr_api=%s  max_retries=%d",
              "retry-db" if retry_existing else "csv",
              args.csv, args.db, args.workers, base_url, args.max_retries)
+    pdf_render_dir = (
+        (args.pdf_render_dir or args.db.parent / "ocr_pdf_pages").resolve()
+        if args.local_pdf_pages
+        else None
+    )
+    if args.local_pdf_pages:
+        LOG.info(
+            "local_pdf_pages=on  render_dir=%s  dpi=%d  render_workers=%d",
+            pdf_render_dir,
+            args.pdf_render_dpi,
+            args.pdf_render_workers,
+        )
 
     if retry_existing and not args.db.exists():
         LOG.error("重试数据库不存在: %s", args.db)
@@ -1341,7 +1533,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         t = threading.Thread(
             target=worker,
             name=f"ocr-worker-{i + 1}",
-            args=(chunk, store, client, args.force_ocr, progress.tick),
+            args=(
+                chunk,
+                store,
+                client,
+                args.force_ocr,
+                args.local_pdf_pages,
+                pdf_render_dir,
+                args.pdf_render_dpi,
+                args.pdf_render_workers,
+                args.keep_rendered_pages,
+                progress.tick,
+            ),
             daemon=False,
         )
         threads.append(t)

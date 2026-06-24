@@ -30,12 +30,27 @@ export interface UploadTaskParams {
 
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'dead_letter'
 
+export interface PageSize {
+	page_index: number
+	width: number
+	height: number
+	dpi?: number
+}
+
 export interface TaskResultMetadata {
 	total_pages?: number
 	total_text_length?: number
 	word_count?: number
 	processing_mode?: string
 	source_type?: string
+	width?: number
+	height?: number
+	page_size?: {
+		width?: number
+		height?: number
+		dpi?: number
+	}
+	page_sizes?: PageSize[]
 }
 
 export interface TaskLayoutBlock {
@@ -45,6 +60,8 @@ export interface TaskLayoutBlock {
 	text_length?: number | null
 	page_index: number
 	layout_type?: string
+	page_width?: number
+	page_height?: number
 	formula_id?: string
 	formula?: {
 		latex: string
@@ -85,6 +102,12 @@ export interface TaskStatusData {
 		merge_timestamp?: number
 		width?: number
 		height?: number
+		page_size?: {
+			width?: number
+			height?: number
+			dpi?: number
+		}
+		page_sizes?: PageSize[]
 	}
 	layout?: TaskLayoutBlock[]
 	images?: Record<string, string>

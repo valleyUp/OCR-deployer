@@ -11,6 +11,8 @@ export interface Block {
 	latex?: string
 	width: number
 	height: number
+	pageWidth?: number
+	pageHeight?: number
 }
 
 interface OcrStore {

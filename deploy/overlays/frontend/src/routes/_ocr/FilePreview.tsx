@@ -10,6 +10,7 @@ import { usePdfScrollToBlock } from '@/hooks/usePdfScrollToBlock'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/libs/utils'
 import { useLinkState } from '@/hooks/useLinkState'
+import { resolvePageDimensions, type PageSizedSource } from '@/libs/pageDimensions'
 
 interface FilePreviewProps { file: UploadedFile | null; result: TaskResponse | null }
 
@@ -39,15 +40,23 @@ export function FilePreview({ file, result }: FilePreviewProps) {
   const previewSource = file?.previewUrl ?? null
   const fileBlob = file?.file && file.file.size > 0 ? file.file : null
   const pdfSource = previewSource ?? fileBlob
-  const pw = result?.response?.metadata?.width ?? 1654
-  const ph = result?.response?.metadata?.height ?? 2339
-  const isValid = useMemo(() => !isNaN(pw) && !isNaN(ph) && result?.status === 'completed', [pw, ph, result?.status])
+  const metadata = result?.response?.metadata
+  const isValid = useMemo(() => result?.status === 'completed', [result?.status])
 
   const hoveredBlock = hoveredBlockId !== null ? blocks.find(b => b.id === hoveredBlockId) : null
   const clickedBlock = clickedBlockId !== null ? blocks.find(b => b.id === clickedBlockId) : null
   const clickedPdfBlock = clickedPdfBlockId !== null ? blocks.find(b => b.id === clickedPdfBlockId) : null
   const linkedBlock = activeLinkId ? blocks.find(b => String(b.id) === activeLinkId) : null
   const activeBlock = clickedBlock || clickedPdfBlock || linkedBlock || hoveredBlock || null
+  const getPageDimensions = useCallback((pageNumber: number, source?: PageSizedSource | null) => {
+    return resolvePageDimensions(pageNumber, metadata, source)
+  }, [metadata])
+  const activePageDimensions = useMemo(() => {
+    return resolvePageDimensions(activeBlock?.pageIndex, metadata, activeBlock)
+  }, [activeBlock, metadata])
+  const clickedPageDimensions = useMemo(() => {
+    return resolvePageDimensions(clickedBlock?.pageIndex, metadata, clickedBlock)
+  }, [clickedBlock, metadata])
 
   const [_imageScale, setImageScale] = useState({ x: 1, y: 1, offsetX: 0, offsetY: 0 })
 
@@ -63,13 +72,28 @@ export function FilePreview({ file, result }: FilePreviewProps) {
     window.addEventListener('resize', update); return () => { img.removeEventListener('load', update); window.removeEventListener('resize', update) }
   }, [pdfUrl, isPdf, zoom, rotation])
 
-  const pdfPageMetrics = usePdfPageMetrics(viewerRef as RefObject<HTMLDivElement>, pdfUrl, isPdf ? 'application/pdf' : file?.type, isValid, activeBlock, pw, ph)
+  const pdfPageMetrics = usePdfPageMetrics(
+    viewerRef as RefObject<HTMLDivElement>,
+    pdfUrl,
+    isPdf ? 'application/pdf' : file?.type,
+    isValid,
+    activeBlock,
+    activePageDimensions.width,
+    activePageDimensions.height
+  )
   const setPreviewClickedBlockId = useCallback((blockId: number | null) => {
     setClickedPdfBlockId(blockId)
     if (blockId !== null) triggerLink(String(blockId), 'preview')
   }, [setClickedPdfBlockId, triggerLink])
   const { handlePdfClick, handlePdfMouseMove, handlePdfMouseLeave, handleImageClick, handleImageMouseMove, handleImageMouseLeave } = useFileBlockInteraction({ blocks, resultStatus: result?.status, setHoveredBlockId, setClickedBlockId: setPreviewClickedBlockId, setShowCopyButton: setShowCopy })
-  usePdfScrollToBlock(clickedBlockId, clickedBlock ?? null, viewerRef as RefObject<HTMLDivElement>, pw, ph, result?.status)
+  usePdfScrollToBlock(
+    clickedBlockId,
+    clickedBlock ?? null,
+    viewerRef as RefObject<HTMLDivElement>,
+    clickedPageDimensions.width,
+    clickedPageDimensions.height,
+    result?.status
+  )
 
   useEffect(() => { if (!hoveredBlockId && !clickedBlockId) setShowCopy(false) }, [hoveredBlockId, clickedBlockId])
   useEffect(() => {
@@ -93,7 +117,8 @@ export function FilePreview({ file, result }: FilePreviewProps) {
     if (!activeBlock?.bbox) return null
     if (activeBlock.pageIndex !== pageNumber) return null
     const m = pdfPageMetrics[pageNumber]; if (!m) return null
-    const sx = m.width / pw; const sy = m.height / ph
+    const dimensions = getPageDimensions(pageNumber, activeBlock)
+    const sx = m.width / dimensions.width; const sy = m.height / dimensions.height
     return (
       <div
         data-block-id={String(activeBlock.id)}
@@ -149,7 +174,15 @@ export function FilePreview({ file, result }: FilePreviewProps) {
           {imgToolbar}
           {isPdf && pdfSource ? (
             <PdfViewer file={pdfSource} className='h-full' renderPageOverlay={renderOverlay}
-              onPageClick={(e, pn) => handlePdfClick(e, pn, pw, ph)} onPageMouseMove={(e, pn) => handlePdfMouseMove(e, pn, pw, ph)} onPageMouseLeave={handlePdfMouseLeave} />
+              onPageClick={(e, pn) => {
+                const dimensions = getPageDimensions(pn)
+                handlePdfClick(e, pn, dimensions.width, dimensions.height)
+              }}
+              onPageMouseMove={(e, pn) => {
+                const dimensions = getPageDimensions(pn)
+                handlePdfMouseMove(e, pn, dimensions.width, dimensions.height)
+              }}
+              onPageMouseLeave={handlePdfMouseLeave} />
           ) : isPdf ? (
             <div className='flex h-full items-center justify-center text-sm text-[var(--color-text-muted)]'>Loading file preview...</div>
           ) : isImg && pdfUrl ? (

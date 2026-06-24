@@ -20,6 +20,7 @@ export type {
 	AppConfig,
 	FormulaFormat,
 	FormulaItem,
+	PageSize,
 	SessionData,
 	TaskFormulasData,
 	TaskLayoutBlock,

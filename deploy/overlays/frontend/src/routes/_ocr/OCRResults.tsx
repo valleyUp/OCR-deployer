@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { JsonPreview } from '@/components/ocr/JsonPreview'
 import { FormulaPanel } from '@/components/ocr/FormulaPanel'
 import type { FormulaItem, TaskLayoutBlock } from '@/libs/api'
+import { resolvePageDimensions } from '@/libs/pageDimensions'
 
 interface OCRResultsProps { result: TaskResponse | null; fileName?: string }
 type ResultTab = 'markdown' | 'json' | 'formulas'
@@ -23,6 +24,8 @@ type ResultBlock = {
   latex?: string
   width: number
   height: number
+  pageWidth: number
+  pageHeight: number
 }
 type ResultLayoutBlock = TaskLayoutBlock & {
   bbox?: [number, number, number, number] | null
@@ -53,8 +56,6 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
   const execSec = response?.execution_time ?? response?.result?.execution_time
   const processingMode = response?.processing_mode || metadata?.processing_mode || 'pipeline'
   const layout = useMemo<ResultLayoutBlock[]>(() => result?.response?.layout || [], [result])
-  const pageHeight = result?.response?.metadata?.height ?? 2339
-  const images = useMemo(() => result?.response?.images || {}, [result?.response?.images])
 
   const formulas = useMemo<FormulaItem[]>(() => {
     const rf = result?.response?.formulas
@@ -73,15 +74,17 @@ export function OCRResults({ result, fileName }: OCRResultsProps) {
     if (result?.status !== 'completed') return []
     return layout.filter(block => block.block_content?.trim()).map((block, index) => {
       const [x1, y1, x2, y2] = block.bbox || [0, 0, 0, 0]
+      const dimensions = resolvePageDimensions(block.page_index ?? 1, metadata, block)
       return {
         id: block.block_id ?? index, content: (block.block_content || '').trim(),
         bbox: block.bbox ? [x1, y1, x2, y2] : null,
         pageIndex: block.page_index ?? 1, isImage: (block.block_content || '').startsWith('!['),
         layoutType: block.layout_type, formulaId: block.formula_id, latex: block.formula?.latex,
-        width: x2 - x1, height: y2 - y1
+        width: x2 - x1, height: y2 - y1,
+        pageWidth: dimensions.width, pageHeight: dimensions.height
       }
     })
-  }, [layout, images, pageHeight, result?.status])
+  }, [layout, metadata, result?.status])
 
   useEffect(() => { if (result?.status === 'completed') setBlocks(blocks) }, [blocks, result?.status, setBlocks])
 

@@ -34,6 +34,74 @@ class LayoutOcrStepInput:
         self.images_dir = images_dir
 
 
+def _positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _dimensions_from_mapping(value: Any) -> tuple[int, int] | None:
+    if not isinstance(value, dict):
+        return None
+    width = _positive_int(value.get("width"))
+    height = _positive_int(value.get("height"))
+    if width and height:
+        return width, height
+    return None
+
+
+def _dimensions_from_page_sizes(
+    page_sizes: Any,
+    page_number: int,
+) -> tuple[int, int] | None:
+    if isinstance(page_sizes, list):
+        for entry in page_sizes:
+            if not isinstance(entry, dict):
+                continue
+            if _positive_int(entry.get("page_index")) == page_number:
+                return _dimensions_from_mapping(entry)
+        if 0 <= page_number - 1 < len(page_sizes):
+            return _dimensions_from_mapping(page_sizes[page_number - 1])
+    elif isinstance(page_sizes, dict):
+        for key in (page_number, str(page_number)):
+            if key in page_sizes:
+                return _dimensions_from_mapping(page_sizes[key])
+    return None
+
+
+def _image_dimensions(image_file: str) -> tuple[int, int] | None:
+    try:
+        with Image.open(image_file) as image:
+            return image.size
+    except Exception as e:
+        logger.warning(f"Failed to read image size from {image_file}: {e}")
+        return None
+
+
+def _resolve_page_dimensions(
+    page_number: int,
+    image_file: str,
+    *,
+    page_size: Any,
+    page_sizes: Any,
+) -> tuple[int, int]:
+    dimensions = _dimensions_from_page_sizes(page_sizes, page_number)
+    if dimensions:
+        return dimensions
+
+    dimensions = _image_dimensions(image_file)
+    if dimensions:
+        return dimensions
+
+    dimensions = _dimensions_from_mapping(page_size)
+    if dimensions:
+        return dimensions
+
+    return 1000, 1000
+
+
 async def layout_and_ocr(
     context: ProcessingContext,
     input: LayoutOcrStepInput,
@@ -60,7 +128,9 @@ async def layout_and_ocr(
     image_files = input.image_files_path
     images_dir = input.images_dir
     page_count = input.page_count
-    page_size = (context.metadata or {}).get("page_size")
+    metadata = context.metadata or {}
+    page_size = metadata.get("page_size")
+    page_sizes = metadata.get("page_sizes")
     logger.info(f"[{task_id}] Starting layout and OCR processing")
     logger.info(f"[{task_id}] Processing {page_count} pages from {images_dir}")
 
@@ -71,6 +141,7 @@ async def layout_and_ocr(
         # 示例：假设我们有一个OCR客户端
         result = await _call_ocr_service(
             page_size=page_size,
+            page_sizes=page_sizes,
             image_files=image_files,
             images_dir=images_dir,
             page_count=page_count,
@@ -95,7 +166,8 @@ async def _call_ocr_service(
     page_count: int,
     config: Dict[str, Any],
     output_dir: str,
-    page_size: Dict[str, Any],
+    page_size: Dict[str, Any] | None,
+    page_sizes: Any = None,
     processing_mode: str = "pipeline",
     progress_callback: Optional[Callable[[float, str], None]] = None,
 ) -> Dict[str, Any]:
@@ -119,8 +191,6 @@ async def _call_ocr_service(
     cli = LayoutAndOCRClient()
     pages_result = []
     total_pages = page_count or len(image_files) or 1
-    page_width = page_size.get("width") if isinstance(page_size, dict) else None
-    page_height = page_size.get("height") if isinstance(page_size, dict) else None
     block_idx = 1
     ref_image_paths = []
 
@@ -131,15 +201,12 @@ async def _call_ocr_service(
 
     async def _recognise_page(index: int, image_file: str) -> Dict[str, Any]:
         page_num = index + 1
-        current_w = page_width
-        current_h = page_height
-        if not current_w or not current_h:
-            try:
-                with Image.open(image_file) as image:
-                    current_w, current_h = image.size
-            except Exception as e:
-                logger.warning(f"Failed to read image size from {image_file}: {e}")
-                current_w, current_h = 1000, 1000
+        current_w, current_h = _resolve_page_dimensions(
+            page_num,
+            image_file,
+            page_size=page_size,
+            page_sizes=page_sizes,
+        )
 
         async def _call() -> List[Dict[str, Any]]:
             return await cli.process_single_image(
@@ -237,6 +304,8 @@ async def _call_ocr_service(
                 "index": block_index,
                 "image_path": image_path_field,
                 "page_index": page_num,
+                "page_width": current_page_width,
+                "page_height": current_page_height,
             }
             if is_formula:
                 block_info["formula_id"] = f"formula-p{page_num:04d}-b{block_index}"
@@ -248,6 +317,8 @@ async def _call_ocr_service(
             {
                 "page_index": page_num,
                 "image_file": image_file,
+                "width": current_page_width,
+                "height": current_page_height,
                 "layout": {"blocks": page_blocks},
             }
         )
@@ -261,6 +332,14 @@ async def _call_ocr_service(
         "success": True,
         "pages": pages_result,
         "total_pages": total_pages,
+        "page_sizes": [
+            {
+                "page_index": page["page_index"],
+                "width": page["width"],
+                "height": page["height"],
+            }
+            for page in pages_result
+        ],
         "images_dir": images_dir,
         "ocr_result_file": f"{ocr_result_file}",
         "ref_image_paths": ref_image_paths,

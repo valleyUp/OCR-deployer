@@ -59,16 +59,23 @@ export function usePdfScrollToBlock(
 				return
 			}
 
-			let currentScale = 1
-			const visibleRenderedPage = root.querySelector('[data-pdf-visible]') as HTMLElement | null
-			const visibleCanvas = visibleRenderedPage?.querySelector('.react-pdf__Page__canvas') as HTMLCanvasElement | null
-			if (visibleCanvas && visibleRenderedPage && pdfOriginalHeight > 0) {
-				currentScale = visibleRenderedPage.getBoundingClientRect().height / pdfOriginalHeight
-			}
+			if (pageWrapper) {
+				const pageRect = pageWrapper.getBoundingClientRect()
+				const containerRect = scrollContainer.getBoundingClientRect()
+				const pageOffsetY = pageRect.top - containerRect.top + scrollContainer.scrollTop
+				scrollContainer.scrollTo({ top: Math.max(0, pageOffsetY), behavior: 'auto' })
+			} else {
+				let currentScale = 1
+				const visibleRenderedPage = root.querySelector('[data-pdf-visible]') as HTMLElement | null
+				const visibleCanvas = visibleRenderedPage?.querySelector('.react-pdf__Page__canvas') as HTMLCanvasElement | null
+				if (visibleCanvas && visibleRenderedPage && pdfOriginalHeight > 0) {
+					currentScale = visibleRenderedPage.getBoundingClientRect().height / pdfOriginalHeight
+				}
 
-			let pageOffset = 20
-			for (let i = 1; i < pageNumber; i++) pageOffset += pdfOriginalHeight * currentScale + 20
-			scrollContainer.scrollTo({ top: pageOffset, behavior: 'auto' })
+				let pageOffset = 20
+				for (let i = 1; i < pageNumber; i++) pageOffset += pdfOriginalHeight * currentScale + 20
+				scrollContainer.scrollTo({ top: pageOffset, behavior: 'auto' })
+			}
 
 			let retryCount = 0
 			const checkAndScroll = () => {

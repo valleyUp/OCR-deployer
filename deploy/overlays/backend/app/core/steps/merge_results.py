@@ -24,6 +24,111 @@ class MergeResultsStepInput:
         self.ocr_result_path = ocr_result_path
 
 
+def _positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _normalize_page_sizes(value: Any) -> List[Dict[str, int]]:
+    page_sizes: List[Dict[str, int]] = []
+
+    if isinstance(value, list):
+        iterable = enumerate(value, start=1)
+    elif isinstance(value, dict):
+        iterable = value.items()
+    else:
+        return page_sizes
+
+    for fallback_index, entry in iterable:
+        if not isinstance(entry, dict):
+            continue
+        page_index = _positive_int(entry.get("page_index")) or _positive_int(
+            fallback_index
+        )
+        width = _positive_int(entry.get("width"))
+        height = _positive_int(entry.get("height"))
+        if page_index and width and height:
+            page_size = {
+                "page_index": page_index,
+                "width": width,
+                "height": height,
+            }
+            dpi = _positive_int(entry.get("dpi"))
+            if dpi:
+                page_size["dpi"] = dpi
+            page_sizes.append(page_size)
+
+    return page_sizes
+
+
+def _page_sizes_from_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, int]]:
+    page_sizes: List[Dict[str, int]] = []
+    for fallback_index, page in enumerate(pages, start=1):
+        if not isinstance(page, dict):
+            continue
+        page_index = _positive_int(page.get("page_index")) or fallback_index
+        width = _positive_int(page.get("width"))
+        height = _positive_int(page.get("height"))
+        if width and height:
+            page_sizes.append({
+                "page_index": page_index,
+                "width": width,
+                "height": height,
+            })
+    return page_sizes
+
+
+def _resolve_page_sizes(
+    context_metadata: Dict[str, Any],
+    ocr_results: Dict[str, Any],
+    pages: List[Dict[str, Any]],
+) -> List[Dict[str, int]]:
+    context_page_sizes = _normalize_page_sizes(context_metadata.get("page_sizes"))
+    resolved_page_sizes = (
+        _normalize_page_sizes(ocr_results.get("page_sizes"))
+        or _page_sizes_from_pages(pages)
+    )
+    if not resolved_page_sizes:
+        return context_page_sizes
+
+    context_by_index = {
+        entry["page_index"]: entry
+        for entry in context_page_sizes
+        if "dpi" in entry
+    }
+    return [
+        {
+            **entry,
+            **(
+                {"dpi": context_by_index[entry["page_index"]]["dpi"]}
+                if "dpi" not in entry and entry["page_index"] in context_by_index
+                else {}
+            ),
+        }
+        for entry in resolved_page_sizes
+    ]
+
+
+def _dimensions_for_page(
+    page_index: int,
+    page: Dict[str, Any],
+    page_sizes_by_index: Dict[int, Dict[str, int]],
+) -> tuple[int | None, int | None]:
+    width = _positive_int(page.get("width"))
+    height = _positive_int(page.get("height"))
+    if width and height:
+        return width, height
+
+    page_size = page_sizes_by_index.get(page_index)
+    if page_size:
+        return page_size["width"], page_size["height"]
+
+    return None, None
+
+
 
 async def merge_results(
     context: ProcessingContext,
@@ -99,18 +204,37 @@ async def _merge_to_markdown(
 ):
     """合并为Markdown格式"""
     pages = ocr_results.get("pages", [])
+    context_metadata = context.metadata or {}
+    page_sizes = _resolve_page_sizes(context_metadata, ocr_results, pages)
+    page_sizes_by_index = {entry["page_index"]: entry for entry in page_sizes}
+    total_pages = len(pages)
 
     markdown_lines = []
     result = {}
     result["metadata"] = {
-        **(context.metadata or {}),
+        **context_metadata,
         "task_id": context.task_id,
         "document_id": context.document_id,
         "processing_mode": context.processing_mode,
+        "total_pages": total_pages,
+        "page_sizes": page_sizes,
     }
+    if page_sizes:
+        first_page_size = page_sizes[0]
+        result["metadata"].setdefault("width", first_page_size["width"])
+        result["metadata"].setdefault("height", first_page_size["height"])
+        result["metadata"].setdefault("page_size", {
+            "width": first_page_size["width"],
+            "height": first_page_size["height"],
+        })
     merge_res_layout = []
-    total_pages = len(pages)
     for page in pages:
+        page_index = _positive_int(page.get("page_index")) or 1
+        page_width, page_height = _dimensions_for_page(
+            page_index,
+            page,
+            page_sizes_by_index,
+        )
         layout = page.get("layout", {}).get("blocks", [])
         for block in layout:
             text = block.get("content", "")
@@ -128,13 +252,19 @@ async def _merge_to_markdown(
 
                 text = f'<div style="text-align: center;"><img src="/api/v1/tasks/file?path={img_name}" alt="Image"/></div>\n'
             markdown_lines.append(f"{text}\n")
+            block_page_index = _positive_int(block.get("page_index")) or page_index
+            block_page_width = _positive_int(block.get("page_width")) or page_width
+            block_page_height = _positive_int(block.get("page_height")) or page_height
             layout_entry = {
                 "block_content": text,
                 "bbox": block.get("layout_box"),
                 "block_id": block.get("index"),
-                "page_index": block.get("page_index"),
+                "page_index": block_page_index,
                 "layout_type": layout_type,
             }
+            if block_page_width and block_page_height:
+                layout_entry["page_width"] = block_page_width
+                layout_entry["page_height"] = block_page_height
             if block.get("formula") or looks_like_formula(layout_type, text):
                 latex = normalize_latex(
                     (block.get("formula") or {}).get("latex")

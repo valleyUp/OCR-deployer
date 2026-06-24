@@ -14,8 +14,8 @@ Workflow
    - Otherwise → submit to the local GLM-OCR backend
      (``POST /api/v1/tasks/upload`` then poll ``GET /api/v1/tasks/{task_id}``)
      with exponential-backoff retries.
-4. Persist one ``ocr_results`` row per page (image files are always page 1)
-   and track progress in ``ocr_jobs`` for crash-safe resume.
+4. Persist normalized file/job/page/run records to SQLite while keeping the
+   legacy ``ocr_results`` page table populated for existing downstream queries.
 
 The OCR backend speaks the GLM-OCR task API (see ``AGENTS.md``): multipart
 upload returns a ``task_id``, polling returns ``full_markdown`` plus a
@@ -25,8 +25,8 @@ automatically by :class:`requests.Session`, so no API key / JWT is required.
 
 Resume semantics
 ----------------
-All discovered files are ``INSERT OR IGNORE``-ed into ``ocr_jobs`` with
-``status='pending'`` at startup.  Each run picks up
+All discovered files are ``INSERT OR IGNORE``-ed into ``ocr_files`` and
+``ocr_jobs`` with ``status='pending'`` at startup.  Each run picks up
 ``status IN ('pending','failed') AND retry_count < max_retries`` rows, flips
 them to ``'processing'`` (atomic claim), then to ``'done'`` or ``'failed'``.
 Re-running the script therefore continues where it stopped.  Use
@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import csv
+import json
 import logging
 import os
 import sqlite3
@@ -142,6 +143,72 @@ OWNER_COOKIE_NAME = "ocr_owner_token"
 LOG = logging.getLogger("ocr_pipeline")
 
 
+def _file_record(path: str, csv_row_id: str = "") -> dict[str, Any]:
+    """Return lightweight filesystem metadata for the canonical file table."""
+    p = Path(path)
+    try:
+        stat = p.stat()
+        file_size: Optional[int] = int(stat.st_size)
+        mtime: Optional[float] = float(stat.st_mtime)
+    except OSError:
+        file_size = None
+        mtime = None
+    return {
+        "file_path": str(p),
+        "source_csv_row": csv_row_id,
+        "file_name": p.name,
+        "extension": p.suffix.lower(),
+        "file_size": file_size,
+        "mtime": mtime,
+    }
+
+
+def _positive_int(value: Any) -> Optional[int]:
+    """Best-effort positive int parser for API/SQLite values."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _page_dimensions_from_task_data(
+    data: dict[str, Any],
+) -> dict[int, tuple[Optional[int], Optional[int]]]:
+    """Extract page dimensions from a completed backend task payload."""
+    dimensions: dict[int, tuple[Optional[int], Optional[int]]] = {}
+    metadata = data.get("metadata") if isinstance(data, dict) else None
+    if isinstance(metadata, dict):
+        page_sizes = metadata.get("page_sizes")
+        if isinstance(page_sizes, list):
+            for fallback_index, item in enumerate(page_sizes, start=1):
+                if not isinstance(item, dict):
+                    continue
+                page_index = _positive_int(item.get("page_index")) or fallback_index
+                width = _positive_int(item.get("width"))
+                height = _positive_int(item.get("height"))
+                if width and height:
+                    dimensions[page_index] = (width, height)
+        if 1 not in dimensions:
+            width = _positive_int(metadata.get("width"))
+            height = _positive_int(metadata.get("height"))
+            if width and height:
+                dimensions[1] = (width, height)
+
+    layout = data.get("layout") if isinstance(data, dict) else None
+    if isinstance(layout, list):
+        for block in layout:
+            if not isinstance(block, dict):
+                continue
+            page_index = _positive_int(block.get("page_index")) or 1
+            width = _positive_int(block.get("page_width"))
+            height = _positive_int(block.get("page_height"))
+            if width and height and page_index not in dimensions:
+                dimensions[page_index] = (width, height)
+
+    return dimensions
+
+
 # ─── data structures ──────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -149,12 +216,14 @@ class OcrJob:
     """A single unit of work tracked in the ``ocr_jobs`` table."""
 
     id: int
+    file_id: Optional[int]
     csv_row_id: str
     file_path: str
     status: str
     process_type: str
     retry_count: int
     task_id: str = ""
+    current_run_id: Optional[int] = None
 
 
 @dataclass
@@ -163,6 +232,9 @@ class PageResult:
 
     page_number: int
     content: str
+    page_width: Optional[int] = None
+    page_height: Optional[int] = None
+    backend_task_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -208,8 +280,38 @@ def setup_logging(log_file: Path, level: str = "INFO") -> None:
 # ─── database ─────────────────────────────────────────────────────────────────
 
 SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS ocr_runs (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    mode           TEXT    NOT NULL,
+    csv_path       TEXT,
+    db_path        TEXT,
+    ocr_api        TEXT,
+    started_at     DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    completed_at   DATETIME,
+    status         TEXT    NOT NULL DEFAULT 'running',
+    discovered     INTEGER NOT NULL DEFAULT 0,
+    jobs_total     INTEGER NOT NULL DEFAULT 0,
+    stats_json     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ocr_files (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path      TEXT    NOT NULL UNIQUE,
+    source_csv_row TEXT,
+    file_name      TEXT,
+    extension      TEXT,
+    file_size      INTEGER,
+    mtime          REAL,
+    created_at     DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    updated_at     DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
 CREATE TABLE IF NOT EXISTS ocr_jobs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_id      INTEGER
+                 REFERENCES ocr_files(id) ON DELETE CASCADE,
+    current_run_id INTEGER
+                 REFERENCES ocr_runs(id) ON DELETE SET NULL,
     csv_row_id   TEXT        NOT NULL,
     file_path    TEXT        NOT NULL UNIQUE,
     status       TEXT        NOT NULL DEFAULT 'pending',
@@ -219,6 +321,23 @@ CREATE TABLE IF NOT EXISTS ocr_jobs (
     task_id      TEXT,
     created_at   DATETIME    NOT NULL DEFAULT (CURRENT_TIMESTAMP),
     updated_at   DATETIME    NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+CREATE TABLE IF NOT EXISTS ocr_pages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id          INTEGER NOT NULL
+                    REFERENCES ocr_jobs(id) ON DELETE CASCADE,
+    file_id         INTEGER
+                    REFERENCES ocr_files(id) ON DELETE CASCADE,
+    page_number     INTEGER NOT NULL,
+    content         TEXT,
+    process_type    TEXT,
+    backend_task_id TEXT,
+    page_width      INTEGER,
+    page_height     INTEGER,
+    created_at      DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    updated_at      DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    UNIQUE(job_id, page_number)
 );
 
 CREATE TABLE IF NOT EXISTS ocr_results (
@@ -232,11 +351,32 @@ CREATE TABLE IF NOT EXISTS ocr_results (
     created_at     DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP)
 );
 
+CREATE TABLE IF NOT EXISTS ocr_attempts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id         INTEGER
+                   REFERENCES ocr_runs(id) ON DELETE SET NULL,
+    job_id         INTEGER NOT NULL
+                   REFERENCES ocr_jobs(id) ON DELETE CASCADE,
+    file_id        INTEGER
+                   REFERENCES ocr_files(id) ON DELETE CASCADE,
+    process_type   TEXT,
+    status         TEXT NOT NULL DEFAULT 'processing',
+    task_id        TEXT,
+    error_msg      TEXT,
+    started_at     DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    finished_at    DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_ocr_files_path         ON ocr_files (file_path);
 CREATE INDEX IF NOT EXISTS idx_ocr_jobs_status       ON ocr_jobs (status);
 CREATE INDEX IF NOT EXISTS idx_ocr_jobs_resume
     ON ocr_jobs (status, retry_count);
+CREATE INDEX IF NOT EXISTS idx_ocr_pages_job_id      ON ocr_pages (job_id);
+CREATE INDEX IF NOT EXISTS idx_ocr_pages_file_id     ON ocr_pages (file_id);
 CREATE INDEX IF NOT EXISTS idx_ocr_results_job_id    ON ocr_results (job_id);
 CREATE INDEX IF NOT EXISTS idx_ocr_results_file_path ON ocr_results (file_path);
+CREATE INDEX IF NOT EXISTS idx_ocr_attempts_job_id   ON ocr_attempts (job_id);
+CREATE INDEX IF NOT EXISTS idx_ocr_attempts_run_id   ON ocr_attempts (run_id);
 """
 
 
@@ -287,24 +427,133 @@ class JobStore:
     @staticmethod
     def _migrate(conn: sqlite3.Connection) -> None:
         """Add columns missing from older schemas (safe to re-run)."""
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(ocr_jobs)")}
-        if "task_id" not in cols:
+        job_cols = JobStore._columns(conn, "ocr_jobs")
+        if "task_id" not in job_cols:
             conn.execute("ALTER TABLE ocr_jobs ADD COLUMN task_id TEXT")
+        if "file_id" not in job_cols:
+            conn.execute("ALTER TABLE ocr_jobs ADD COLUMN file_id INTEGER")
+        if "current_run_id" not in job_cols:
+            conn.execute("ALTER TABLE ocr_jobs ADD COLUMN current_run_id INTEGER")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ocr_jobs_file_id "
+            "ON ocr_jobs (file_id)"
+        )
+
+        for row in conn.execute("SELECT id, csv_row_id, file_path FROM ocr_jobs"):
+            file_id = JobStore._upsert_file(
+                conn,
+                row["file_path"],
+                row["csv_row_id"],
+            )
+            conn.execute(
+                "UPDATE ocr_jobs SET file_id=? WHERE id=? AND file_id IS NULL",
+                (file_id, row["id"]),
+            )
 
         csv_table = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='csv_data'"
         ).fetchone()
-        if not csv_table:
-            return
-        csv_cols = {row[1] for row in conn.execute("PRAGMA table_info(csv_data)")}
-        if "file_path" not in csv_cols:
-            conn.execute("ALTER TABLE csv_data ADD COLUMN file_path TEXT")
+        if csv_table:
+            csv_cols = JobStore._columns(conn, "csv_data")
+            if "file_id" not in csv_cols:
+                conn.execute("ALTER TABLE csv_data ADD COLUMN file_id INTEGER")
+            if "file_path" not in csv_cols:
+                conn.execute("ALTER TABLE csv_data ADD COLUMN file_path TEXT")
+            conn.execute(
+                "UPDATE csv_data "
+                "SET file_id=(SELECT ocr_jobs.file_id "
+                "             FROM ocr_jobs "
+                "             WHERE ocr_jobs.id=csv_data.job_id) "
+                "WHERE file_id IS NULL"
+            )
             conn.execute(
                 "UPDATE csv_data "
                 "SET file_path=(SELECT ocr_jobs.file_path "
                 "               FROM ocr_jobs "
                 "               WHERE ocr_jobs.id=csv_data.job_id) "
-                "WHERE file_path IS NULL"
+                "WHERE file_path IS NULL OR file_path=''"
+            )
+        JobStore._backfill_pages(conn)
+
+    @staticmethod
+    def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+        """Return column names for *table*."""
+        return {row[1] for row in conn.execute(f"PRAGMA table_info({_quote_ident(table)})")}
+
+    @staticmethod
+    def _upsert_file(
+        conn: sqlite3.Connection,
+        file_path: str,
+        csv_row_id: str = "",
+    ) -> int:
+        """Insert/update ``ocr_files`` and return its id."""
+        record = _file_record(file_path, csv_row_id)
+        conn.execute(
+            "INSERT OR IGNORE INTO ocr_files "
+            "(file_path, source_csv_row, file_name, extension, file_size, mtime) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                record["file_path"],
+                record["source_csv_row"],
+                record["file_name"],
+                record["extension"],
+                record["file_size"],
+                record["mtime"],
+            ),
+        )
+        conn.execute(
+            "UPDATE ocr_files "
+            "SET source_csv_row=COALESCE(NULLIF(?, ''), source_csv_row), "
+            "    file_name=?, extension=?, file_size=?, mtime=?, "
+            "    updated_at=CURRENT_TIMESTAMP "
+            "WHERE file_path=?",
+            (
+                csv_row_id,
+                record["file_name"],
+                record["extension"],
+                record["file_size"],
+                record["mtime"],
+                record["file_path"],
+            ),
+        )
+        row = conn.execute(
+            "SELECT id FROM ocr_files WHERE file_path=?",
+            (record["file_path"],),
+        ).fetchone()
+        if not row:
+            raise RuntimeError(f"无法创建 ocr_files 记录: {file_path}")
+        return int(row["id"])
+
+    @staticmethod
+    def _backfill_pages(conn: sqlite3.Connection) -> None:
+        """Backfill canonical page rows from legacy ``ocr_results``."""
+        table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='ocr_results'"
+        ).fetchone()
+        if not table:
+            return
+
+        rows = conn.execute(
+            "SELECT r.job_id, r.file_path, r.page_number, r.content, "
+            "       j.file_id, j.process_type, j.task_id "
+            "FROM ocr_results r "
+            "LEFT JOIN ocr_jobs j ON j.id=r.job_id "
+            "ORDER BY r.id"
+        ).fetchall()
+        for row in rows:
+            conn.execute(
+                "INSERT OR IGNORE INTO ocr_pages "
+                "(job_id, file_id, page_number, content, process_type, "
+                " backend_task_id) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    row["job_id"],
+                    row["file_id"],
+                    row["page_number"],
+                    row["content"],
+                    row["process_type"],
+                    row["task_id"],
+                ),
             )
 
     @contextmanager
@@ -334,22 +583,34 @@ class JobStore:
         col_names = col_names or []
         col_types = col_types or {}
 
+        csv_extra_cols = [
+            c for c in col_names
+            if c not in {"job_id", "file_id", "file_path"}
+        ]
+
         # -- create csv_data table on first run --------------------------------
         if col_names:
             col_defs = ", ".join(
                 f"{_quote_ident(c)} {col_types.get(c, 'TEXT')}"
-                for c in col_names
+                for c in csv_extra_cols
             )
+            extra_sql = f", {col_defs}" if col_defs else ""
             ddl = (
                 "CREATE TABLE IF NOT EXISTS csv_data ("
                 "  job_id INTEGER PRIMARY KEY"
                 "    REFERENCES ocr_jobs(id) ON DELETE CASCADE,"
-                f"  {col_defs}"
+                "  file_id INTEGER,"
+                "  file_path TEXT"
+                f"{extra_sql}"
                 ")"
             )
             with self._cursor() as cur:
                 cur.connection.execute(ddl)
-                self._ensure_csv_data_columns(cur.connection, col_names, col_types)
+                self._ensure_csv_data_columns(
+                    cur.connection,
+                    csv_extra_cols,
+                    col_types,
+                )
 
         # -- insert ocr_jobs ---------------------------------------------------
         inserted = 0
@@ -358,10 +619,16 @@ class JobStore:
             conn.execute("BEGIN")
             try:
                 for entry in entries:
+                    file_id = self._upsert_file(
+                        conn,
+                        entry["file_path"],
+                        entry["csv_row_id"],
+                    )
                     cur.execute(
                         "INSERT OR IGNORE INTO ocr_jobs "
-                        "(csv_row_id, file_path, status) VALUES (?, ?, 'pending')",
-                        (entry["csv_row_id"], entry["file_path"]),
+                        "(file_id, csv_row_id, file_path, status) "
+                        "VALUES (?, ?, ?, 'pending')",
+                        (file_id, entry["csv_row_id"], entry["file_path"]),
                     )
                     if cur.rowcount == 1:
                         inserted += 1
@@ -374,26 +641,43 @@ class JobStore:
                         if not row:
                             continue
                         job_id = row["id"]
+                        cur.execute(
+                            "UPDATE ocr_jobs "
+                            "SET file_id=?, csv_row_id=?, updated_at=CURRENT_TIMESTAMP "
+                            "WHERE id=?",
+                            (file_id, entry["csv_row_id"], job_id),
+                        )
 
                     if col_names and entry.get("csv_data"):
-                        placeholders = ", ".join("?" for _ in col_names)
-                        cols_sql = ", ".join(_quote_ident(c) for c in col_names)
+                        placeholders = ", ".join("?" for _ in csv_extra_cols)
+                        cols_sql = ", ".join(
+                            _quote_ident(c) for c in csv_extra_cols
+                        )
                         values = self._coerce_row(
-                            entry["csv_data"], col_names, col_types
+                            entry["csv_data"], csv_extra_cols, col_types
                         )
-                        cur.execute(
-                            f"INSERT OR IGNORE INTO csv_data "
-                            f"(job_id, {cols_sql}) VALUES (?, {placeholders})",
-                            [job_id, *values],
-                        )
-                        if "file_path" in col_names:
+                        raw_csv_path = entry["csv_data"].get("file_path", "")
+                        if csv_extra_cols:
                             cur.execute(
-                                "UPDATE csv_data "
-                                "SET file_path=? "
-                                "WHERE job_id=? AND "
-                                "      (file_path IS NULL OR file_path='')",
-                                (entry["csv_data"].get("file_path", ""), job_id),
+                                "INSERT OR IGNORE INTO csv_data "
+                                f"(job_id, file_id, file_path, {cols_sql}) "
+                                f"VALUES (?, ?, ?, {placeholders})",
+                                [job_id, file_id, raw_csv_path, *values],
                             )
+                        else:
+                            cur.execute(
+                                "INSERT OR IGNORE INTO csv_data "
+                                "(job_id, file_id, file_path) VALUES (?, ?, ?)",
+                                (job_id, file_id, raw_csv_path),
+                            )
+                        cur.execute(
+                            "UPDATE csv_data "
+                            "SET file_id=?, file_path=? "
+                            "WHERE job_id=? AND "
+                            "      (file_id IS NULL OR file_path IS NULL "
+                            "       OR file_path='')",
+                            (file_id, raw_csv_path, job_id),
+                        )
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
@@ -414,6 +698,8 @@ class JobStore:
             row[1] for row in conn.execute("PRAGMA table_info(csv_data)")
         }
         for name in col_names:
+            if name in {"job_id", "file_id", "file_path"}:
+                continue
             if name in existing:
                 continue
             ctype = col_types.get(name, "TEXT")
@@ -463,7 +749,105 @@ class JobStore:
             LOG.info("已重置 %d 个孤儿 job (processing → pending)", count)
         return count
 
-    def save_task_id(self, job_id: int, task_id: str) -> None:
+    def start_run(
+        self,
+        *,
+        mode: str,
+        csv_path: Optional[Path],
+        db_path: Path,
+        ocr_api: str,
+        discovered: int = 0,
+    ) -> int:
+        """Create a durable record for one script invocation."""
+        with self._cursor() as cur:
+            cur.execute(
+                "INSERT INTO ocr_runs "
+                "(mode, csv_path, db_path, ocr_api, discovered) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    mode,
+                    str(csv_path) if csv_path else None,
+                    str(db_path),
+                    ocr_api,
+                    discovered,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def update_run_discovered(self, run_id: int, discovered: int) -> None:
+        """Update how many source files were discovered for this run."""
+        with self._cursor() as cur:
+            cur.execute(
+                "UPDATE ocr_runs SET discovered=? WHERE id=?",
+                (discovered, run_id),
+            )
+
+    def finish_run(
+        self,
+        run_id: int,
+        *,
+        status: str,
+        jobs_total: int = 0,
+        stats: Optional[dict[str, int]] = None,
+    ) -> None:
+        """Mark a run complete and store a compact stats snapshot."""
+        with self._cursor() as cur:
+            cur.execute(
+                "UPDATE ocr_runs "
+                "SET completed_at=CURRENT_TIMESTAMP, status=?, jobs_total=?, "
+                "    stats_json=? "
+                "WHERE id=?",
+                (
+                    status,
+                    jobs_total,
+                    json.dumps(stats or {}, ensure_ascii=False),
+                    run_id,
+                ),
+            )
+
+    def start_attempt(
+        self,
+        run_id: Optional[int],
+        job: OcrJob,
+        process_type: str,
+    ) -> int:
+        """Create a per-job attempt record for the current run."""
+        with self._cursor() as cur:
+            cur.execute(
+                "INSERT INTO ocr_attempts "
+                "(run_id, job_id, file_id, process_type, status, task_id) "
+                "VALUES (?, ?, ?, ?, 'processing', ?)",
+                (run_id, job.id, job.file_id, process_type, job.task_id or None),
+            )
+            return int(cur.lastrowid)
+
+    def finish_attempt(
+        self,
+        attempt_id: Optional[int],
+        *,
+        status: str,
+        task_id: str = "",
+        error_msg: str = "",
+    ) -> None:
+        """Finish a per-job attempt if one was created."""
+        if attempt_id is None:
+            return
+        truncated = (error_msg or "")[:2000]
+        with self._cursor() as cur:
+            cur.execute(
+                "UPDATE ocr_attempts "
+                "SET status=?, task_id=COALESCE(NULLIF(?, ''), task_id), "
+                "    error_msg=?, finished_at=CURRENT_TIMESTAMP "
+                "WHERE id=?",
+                (status, task_id, truncated or None, attempt_id),
+            )
+
+    def save_task_id(
+        self,
+        job_id: int,
+        task_id: str,
+        attempt_id: Optional[int] = None,
+    ) -> None:
         """Persist the backend task_id so polling can resume after a crash."""
         with self._cursor() as cur:
             cur.execute(
@@ -471,6 +855,11 @@ class JobStore:
                 "WHERE id=?",
                 (task_id, job_id),
             )
+            if attempt_id is not None:
+                cur.execute(
+                    "UPDATE ocr_attempts SET task_id=? WHERE id=?",
+                    (task_id, attempt_id),
+                )
 
     # ── claim / fetch ─────────────────────────────────────────────────────────
 
@@ -488,9 +877,9 @@ class JobStore:
         *ignore_retry_budget* is true.
         """
         sql = (
-            "SELECT id, csv_row_id, file_path, status, "
+            "SELECT id, file_id, csv_row_id, file_path, status, "
             "       COALESCE(process_type, '') AS process_type, retry_count, "
-            "       COALESCE(task_id, '') AS task_id "
+            "       COALESCE(task_id, '') AS task_id, current_run_id "
             "FROM ocr_jobs "
             "WHERE status IN ('pending', 'failed') "
         )
@@ -531,7 +920,12 @@ class JobStore:
         LOG.info("已准备重试 %d 个 pending/failed job", count)
         return count
 
-    def claim(self, job_id: int, process_type: str) -> bool:
+    def claim(
+        self,
+        job_id: int,
+        process_type: str,
+        run_id: Optional[int] = None,
+    ) -> bool:
         """Atomically flip a job to ``processing``.
 
         The ``WHERE status IN (...)`` guard makes the claim safe even if two
@@ -540,9 +934,10 @@ class JobStore:
         with self._cursor() as cur:
             cur.execute(
                 "UPDATE ocr_jobs "
-                "SET status='processing', process_type=?, updated_at=CURRENT_TIMESTAMP "
+                "SET status='processing', process_type=?, current_run_id=?, "
+                "    updated_at=CURRENT_TIMESTAMP "
                 "WHERE id=? AND status IN ('pending', 'failed')",
-                (process_type, job_id),
+                (process_type, run_id, job_id),
             )
             return cur.rowcount == 1
 
@@ -555,14 +950,40 @@ class JobStore:
             conn.execute("BEGIN")
             try:
                 cur.execute(
-                    "SELECT csv_row_id, file_path FROM ocr_jobs WHERE id=?",
+                    "SELECT csv_row_id, file_path, file_id, process_type, task_id "
+                    "FROM ocr_jobs WHERE id=?",
                     (job_id,),
                 )
                 row = cur.fetchone()
                 csv_row_id = row["csv_row_id"] if row else ""
                 file_path = row["file_path"] if row else ""
+                file_id = row["file_id"] if row else None
+                process_type = row["process_type"] if row else None
+                job_task_id = row["task_id"] if row else ""
+
+                cur.execute("DELETE FROM ocr_pages WHERE job_id=?", (job_id,))
+                cur.execute("DELETE FROM ocr_results WHERE job_id=?", (job_id,))
 
                 if results:
+                    cur.executemany(
+                        "INSERT INTO ocr_pages "
+                        "(job_id, file_id, page_number, content, process_type, "
+                        " backend_task_id, page_width, page_height) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        [
+                            (
+                                job_id,
+                                file_id,
+                                r.page_number,
+                                r.content,
+                                process_type,
+                                r.backend_task_id or job_task_id,
+                                r.page_width,
+                                r.page_height,
+                            )
+                            for r in results
+                        ],
+                    )
                     cur.executemany(
                         "INSERT INTO ocr_results "
                         "(job_id, file_path, page_number, content, source_csv_row) "
@@ -1151,10 +1572,15 @@ class OCRApiClient:
         task_id = self.upload(file_path)
         LOG.info("已提交 %s → task_id=%s", Path(file_path).name, task_id)
         data = self.poll(task_id)
-        return self._split_into_pages(data, file_path)
+        return self._split_into_pages(data, file_path, task_id=task_id)
 
     @staticmethod
-    def _split_into_pages(data: dict[str, Any], file_path: str) -> list[PageResult]:
+    def _split_into_pages(
+        data: dict[str, Any],
+        file_path: str,
+        *,
+        task_id: str = "",
+    ) -> list[PageResult]:
         """Turn a completed-task payload into per-page :class:`PageResult`.
 
         Layout blocks carry a 1-based ``page_index``; we group their
@@ -1164,6 +1590,7 @@ class OCRApiClient:
         """
         layout = data.get("layout")
         results: list[PageResult] = []
+        page_dimensions = _page_dimensions_from_task_data(data)
 
         if isinstance(layout, list) and layout:
             pages: dict[int, list[str]] = {}
@@ -1181,17 +1608,41 @@ class OCRApiClient:
                 if isinstance(content, str) and content.strip():
                     pages.setdefault(page_index, []).append(content)
             for page_number in sorted(pages):
+                width, height = page_dimensions.get(page_number, (None, None))
                 results.append(
-                    PageResult(page_number, "\n\n".join(pages[page_number]).strip())
+                    PageResult(
+                        page_number,
+                        "\n\n".join(pages[page_number]).strip(),
+                        page_width=width,
+                        page_height=height,
+                        backend_task_id=task_id,
+                    )
                 )
 
         if not results:
+            width, height = page_dimensions.get(1, (None, None))
             markdown = (data.get("full_markdown") or "").strip()
             if markdown:
-                results.append(PageResult(1, markdown))
+                results.append(
+                    PageResult(
+                        1,
+                        markdown,
+                        page_width=width,
+                        page_height=height,
+                        backend_task_id=task_id,
+                    )
+                )
             else:
                 LOG.warning("%s OCR 返回空内容 (无 layout / full_markdown)", file_path)
-                results.append(PageResult(1, ""))
+                results.append(
+                    PageResult(
+                        1,
+                        "",
+                        page_width=width,
+                        page_height=height,
+                        backend_task_id=task_id,
+                    )
+                )
         return results
 
 
@@ -1215,11 +1666,23 @@ def process_rendered_pdf_pages(
             task_id,
         )
         data = client.poll(task_id)
-        page_results = client._split_into_pages(data, rendered.image_path)
+        page_results = client._split_into_pages(
+            data,
+            rendered.image_path,
+            task_id=task_id,
+        )
         content = "\n\n".join(
             page.content for page in page_results if page.content
         ).strip()
-        results.append(PageResult(rendered.page_number, content))
+        results.append(
+            PageResult(
+                rendered.page_number,
+                content,
+                page_width=rendered.width,
+                page_height=rendered.height,
+                backend_task_id=task_id,
+            )
+        )
     return results
 
 
@@ -1229,6 +1692,7 @@ def process_one(
     job: OcrJob,
     store: JobStore,
     client: OCRApiClient,
+    run_id: Optional[int],
     force_ocr: bool = False,
     local_pdf_pages: bool = False,
     pdf_render_dir: Optional[Path] = None,
@@ -1255,13 +1719,15 @@ def process_one(
     else:
         process_type = "ocr_api"
 
-    if not store.claim(job.id, process_type):
+    if not store.claim(job.id, process_type, run_id=run_id):
         # Another worker beat us to it (or status changed) — skip.
         return "skipped", "claim lost"
+    attempt_id = store.start_attempt(run_id, job, process_type)
 
     LOG.info("[%s] 处理 %s (%s)", process_type, path, job.csv_row_id)
 
     render_dir_for_cleanup: Optional[Path] = None
+    attempt_task_id = job.task_id or ""
     try:
         if use_pdftotext:
             results = process_text_pdf(path)
@@ -1290,27 +1756,44 @@ def process_one(
                 data = client.poll(job.task_id)
             else:
                 task_id = client.upload(path)
+                attempt_task_id = task_id
                 LOG.info("已提交 %s → task_id=%s", Path(path).name, task_id)
-                store.save_task_id(job.id, task_id)
+                store.save_task_id(job.id, task_id, attempt_id=attempt_id)
                 data = client.poll(task_id)
-            results = client._split_into_pages(data, path)
+            results = client._split_into_pages(
+                data,
+                path,
+                task_id=attempt_task_id,
+            )
+        if not attempt_task_id:
+            attempt_task_id = next(
+                (r.backend_task_id for r in results if r.backend_task_id),
+                "",
+            )
+        store.mark_done(job.id, results)
+        store.finish_attempt(attempt_id, status="done", task_id=attempt_task_id)
+        LOG.info("[%s] 完成 %s: %d 页", process_type, path, len(results))
+        return "done", f"{len(results)} 页"
     except Exception as exc:
         store.mark_failed(job.id, str(exc))
+        store.finish_attempt(
+            attempt_id,
+            status="failed",
+            task_id=attempt_task_id,
+            error_msg=str(exc),
+        )
         LOG.error("[%s] 失败 %s: %s", process_type, path, exc)
         return "failed", str(exc)
     finally:
         if render_dir_for_cleanup is not None and not keep_rendered_pages:
             shutil.rmtree(render_dir_for_cleanup, ignore_errors=True)
 
-    store.mark_done(job.id, results)
-    LOG.info("[%s] 完成 %s: %d 页", process_type, path, len(results))
-    return "done", f"{len(results)} 页"
-
 
 def worker(
     jobs: list[OcrJob],
     store: JobStore,
     client: OCRApiClient,
+    run_id: Optional[int],
     force_ocr: bool,
     local_pdf_pages: bool,
     pdf_render_dir: Optional[Path],
@@ -1326,6 +1809,7 @@ def worker(
                 job,
                 store,
                 client,
+                run_id,
                 force_ocr=force_ocr,
                 local_pdf_pages=local_pdf_pages,
                 pdf_render_dir=pdf_render_dir,
@@ -1469,6 +1953,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 2
 
     store = JobStore(args.db)
+    run_id = store.start_run(
+        mode="retry-db" if retry_existing else "csv",
+        csv_path=None if retry_existing else args.csv,
+        db_path=args.db,
+        ocr_api=base_url,
+    )
     discovered = 0
     col_types: dict[str, str] = {}
 
@@ -1482,24 +1972,30 @@ def main(argv: Optional[list[str]] = None) -> int:
         try:
             entries, col_names, col_types = discover_files(args.csv)
         except SystemExit:
+            store.finish_run(run_id, status="failed", stats=store.stats())
             raise
         except Exception as exc:
             LOG.error("扫描 CSV 失败: %s", exc)
+            store.finish_run(run_id, status="failed", stats=store.stats())
             return 2
         if not entries:
             LOG.warning("CSV 未发现任何可处理文件，退出。")
+            store.finish_run(run_id, status="empty", stats=store.stats())
             return 0
 
         discovered = len(entries)
+        store.update_run_discovered(run_id, discovered)
         store.seed_jobs(entries, col_names, col_types)
         store.reset_orphans()
 
     if args.dry_run:
+        stats = store.stats()
+        store.finish_run(run_id, status="dry_run", stats=stats)
         if retry_existing:
             LOG.info("[dry-run] 已准备指定数据库中的 pending/failed 任务，跳过处理。")
         else:
             LOG.info("[dry-run] 共 %d 个文件已登记，跳过处理。", discovered)
-        print(json_dry_run_summary(store.stats(), discovered, col_types))
+        print(json_dry_run_summary(stats, discovered, col_types))
         return 0
 
     # 2. fetch pending + shard across workers
@@ -1510,7 +2006,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     if not pending:
         LOG.info("没有待处理任务（全部已完成或重试预算耗尽）。")
-        print_summary(store.stats())
+        stats = store.stats()
+        store.finish_run(run_id, status="empty", stats=stats)
+        print_summary(stats)
         return 0
     LOG.info("本轮待处理 %d 个文件，分发给 %d 个 worker", len(pending), args.workers)
 
@@ -1537,6 +2035,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 chunk,
                 store,
                 client,
+                run_id,
                 args.force_ocr,
                 args.local_pdf_pages,
                 pdf_render_dir,
@@ -1557,7 +2056,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     progress.finish()
 
     LOG.info("==== 处理结束 %s ====", _utc_now_iso())
-    print_summary(store.stats())
+    stats = store.stats()
+    store.finish_run(run_id, status="completed", jobs_total=len(pending), stats=stats)
+    print_summary(stats)
     return 0
 
 
